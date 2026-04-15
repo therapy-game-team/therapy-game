@@ -181,8 +181,9 @@
       <h2>✋ Hand Therapy Game</h2>
       <p>
         ☝️ <strong style="color:#7ef7c8">Point index finger</strong> to move cursor<br>
-        🤏 <strong style="color:#7ef7c8">Pinch</strong> near ball = grab<br>
-        🤏 <strong style="color:#7ef7c8">Release fingers</strong> over matching target = place<br><br>
+        🤏 <strong style="color:#7ef7c8">Pinch</strong> near a ball = grab<br>
+        ✋ <strong style="color:#7ef7c8">Keep pinching</strong> = move ball<br>
+        🖐️ <strong style="color:#7ef7c8">Open fingers</strong> over matching target = place<br><br>
         Keep your hand in the camera the whole time!
       </p>
       <button class="btn" id="btn-start">Allow Camera &amp; Play</button>
@@ -240,6 +241,8 @@
 
       for (const h of Object.values(HANDS)) {
         h.ballId = null;
+        h.pinch = false;
+        h.prevPinch = false;
       }
 
       const br = Math.max(32, 58 - level * 2);
@@ -314,21 +317,25 @@
     }
 
     function stepHand(h, label) {
-      const justPinched = h.pinch && !h.prevPinch;
-      const justReleased = !h.pinch && h.prevPinch;
-
       if (h.ballId === null) {
-        if (justPinched) {
+        if (h.pinch) {
+          let nearestBall = null;
+          let nearestDist = Infinity;
+
           for (const b of balls) {
             if (b.placed) continue;
             if (b.owner !== null) continue;
 
-            const nearBall = Math.hypot(h.x - b.x, h.y - b.y) < b.r + 65;
-            if (nearBall) {
-              b.owner = label;
-              h.ballId = b.id;
-              break;
+            const d = Math.hypot(h.x - b.x, h.y - b.y);
+            if (d < b.r + 70 && d < nearestDist) {
+              nearestBall = b;
+              nearestDist = d;
             }
+          }
+
+          if (nearestBall) {
+            nearestBall.owner = label;
+            h.ballId = nearestBall.id;
           }
         }
       } else {
@@ -337,14 +344,13 @@
         if (!b || b.placed) {
           if (b) b.owner = null;
           h.ballId = null;
-          h.prevPinch = h.pinch;
           return;
         }
 
-        b.x += (h.x - b.x) * 0.6;
-        b.y += (h.y - b.y) * 0.6;
+        b.x += (h.x - b.x) * 0.45;
+        b.y += (h.y - b.y) * 0.45;
 
-        if (justReleased) {
+        if (!h.pinch) {
           b.owner = null;
           h.ballId = null;
 
@@ -378,8 +384,6 @@
           }
         }
       }
-
-      h.prevPinch = h.pinch;
     }
 
     function drawBg() {
@@ -531,7 +535,7 @@
       ctx.textAlign = 'center';
 
       let lbl = '';
-      if (holding) lbl = `${label[0]} release over target`;
+      if (holding) lbl = `${label[0]} open fingers to drop`;
       else lbl = `${label[0]} pinch near ball`;
 
       ctx.fillText(lbl, h.x, h.y - r - 8);
@@ -610,6 +614,7 @@
       if (!res.multiHandLandmarks || !res.multiHandLandmarks.length) {
         for (const h of Object.values(HANDS)) {
           h.pinch = false;
+          h.prevPinch = false;
         }
         document.getElementById('dbg').textContent = 'Keep hand in camera view';
         return;
