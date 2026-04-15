@@ -296,7 +296,7 @@ function stepHand(h,label){
   if(!h.visible)return;
 
   if(h.ballId===null){
-    // Not holding — try to grab if fist
+    // Not holding — try to grab if fist closed
     if(!h.open){
       for(const b of balls){
         if(b.placed||b.owner!==null)continue;
@@ -306,25 +306,41 @@ function stepHand(h,label){
       }
     }
   } else {
-    // Holding — drag ball
+    // Holding a ball
     const b=balls.find(b=>b.id===h.ballId);
-    if(!b||b.placed){h.ballId=null;return;}
-    b.x+=(h.x-b.x)*0.6;b.y+=(h.y-b.y)*0.6;
+
+    // Ball missing or already placed — clean up and reset
+    if(!b||b.placed){
+      if(b) b.owner=null;  // always clear owner
+      h.ballId=null;
+      return;
+    }
+
+    // Drag ball toward hand
+    b.x+=(h.x-b.x)*0.6;
+    b.y+=(h.y-b.y)*0.6;
 
     // Release when hand opens
     if(h.open){
-      b.owner=null;h.ballId=null;
+      // Clear both owner and ballId FIRST
+      b.owner=null;
+      h.ballId=null;
+
       const t=targets.find(t=>t.id===b.id);
       if(t&&Math.hypot(b.x-t.x,b.y-t.y)<t.r+55){
-        b.x=t.x;b.y=t.y;b.placed=true;t.done=true;
+        // Place it!
+        b.x=t.x;b.y=t.y;
+        b.placed=true;t.done=true;
         burst(t.x,t.y,t.c);
         score+=10*level;placed++;totalDone++;
         flash(`+${10*level}!`);ui();
         if(balls.every(b=>b.placed)){
-          level++;placed=0;flash(`Level ${level}!`);
+          level++;placed=0;
+          flash(`Level ${level}!`);
           setTimeout(spawnRound,1000);
         }
       }
+      // If not on target — ball drops, owner is already null, ready to grab again
     }
   }
 }
