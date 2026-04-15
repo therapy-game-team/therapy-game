@@ -214,7 +214,7 @@
     const COLS = ['#6b6bff','#3ddff0','#77cb6b','#ff964d','#ce6bff','#4dc8ff'];
     const CURSOR_COLOR = '#00c8ff';
     const SESSION = 180;
-    const PINCH_THRESH = 0.07;
+    const PINCH_THRESH = 0.11;
 
     const HAND = {
       x: 300,
@@ -325,7 +325,7 @@
             if (b.owner !== null) continue;
 
             const d = Math.hypot(HAND.x - b.x, HAND.y - b.y);
-            if (d < b.r + 85 && d < nearestDist) {
+            if (d < b.r + 140 && d < nearestDist) {
               nearestBall = b;
               nearestDist = d;
             }
@@ -355,7 +355,7 @@
           const t = targets.find(target => target.id === b.id);
 
           if (t && !t.done) {
-            const onTarget = Math.hypot(b.x - t.x, b.y - t.y) < t.r + 65;
+            const onTarget = Math.hypot(b.x - t.x, b.y - t.y) < t.r + 100;
 
             if (onTarget) {
               b.x = t.x;
@@ -624,7 +624,7 @@
       HAND.pinch = dist < PINCH_THRESH;
 
       document.getElementById('dbg').textContent =
-        `pinch dist=${dist.toFixed(3)} | ${HAND.pinch ? 'PINCHING' : 'POINTING'} | holding=${HAND.ballId !== null}`;
+        `pinch dist=${dist.toFixed(4)} | ${HAND.pinch ? 'PINCHING' : 'POINTING'} | holding=${HAND.ballId !== null}`;
     }
 
     document.getElementById('btn-start').onclick = async function() {
