@@ -95,8 +95,8 @@ let t0=null, running=false;
 let flashTxt='', flashAt=0;
 
 // ── Hand state (simple and clean) ──
-const H_RIGHT = { x:200, y:300, fist:false, visible:false, holding:null };
-const H_LEFT  = { x:500, y:300, fist:false, visible:false, holding:null };
+const H_RIGHT = { x:200, y:300, fist:false, visible:false, holding:null, readyToGrab:false };
+const H_LEFT  = { x:500, y:300, fist:false, visible:false, holding:null, readyToGrab:false };
 
 // ── Spawn new round of balls ──
 function spawnRound(){
@@ -181,18 +181,28 @@ function processHand(hand, label){
     return;
   }
 
-  // ── GRAB: fist closed + not already holding ──
-  if(hand.fist && hand.holding === null){
+  // Hand is always visible when detected — show cursor regardless of readyToGrab
+  // readyToGrab only controls whether a NEW grab can start
+
+  if(!hand.fist) hand.readyToGrab = true; // any open = ready again
+
+  if(hand.fist && hand.holding === null && hand.readyToGrab){
     for(const b of balls){
       if(b.placed) continue;
-      if(b.heldBy !== null) continue;  // already held by other hand
+      if(b.heldBy !== null) continue;
       const d = Math.hypot(hand.x - b.x, hand.y - b.y);
       if(d < b.r + 60){
         b.heldBy = label;
         hand.holding = b.id;
+        hand.readyToGrab = false;
         break;
       }
     }
+  }
+
+  // If fist but nothing nearby and readyToGrab=false, reset it so hand is not stuck
+  if(hand.fist && hand.holding === null && !hand.readyToGrab){
+    hand.readyToGrab = true; // don't lock the hand forever
   }
 
   // ── DRAG: move ball with hand ──
@@ -310,7 +320,7 @@ function drawBall(b){
 }
 
 function drawHand(hand, label){
-  if(!hand.visible) return;
+  if(!hand.visible) return;  // only hide if truly not detected
   const col=HCOL[label], r=hand.fist?16:24;
   ctx.save();
   ctx.shadowColor=col; ctx.shadowBlur=18;
@@ -430,9 +440,9 @@ function onResults(results){
     const extended = TIPS.filter((t,i)=> lms[t].y < lms[PIPS[i]].y).length;
 
     if(curled   >= 3) hand.fist = true;
-    if(extended >= 3) hand.fist = false;
+    if(extended >= 1) hand.fist = false;  // just 1 finger open = release
 
-    dbgText += `${label}: ${hand.fist?'✊ FIST':'✋ open'} curled=${curled} | `;
+    dbgText += `${label}: ${hand.fist?'✊ FIST':'✋ open'} ready=${hand.readyToGrab} curled=${curled} extended=${extended} | `;
   });
 
   document.getElementById('dbg').textContent = dbgText;
