@@ -106,19 +106,19 @@ function spawnRound(){
   H_RIGHT.holding = null;
   H_LEFT.holding  = null;
 
-  const ballR = Math.max(24, 50 - level*2);
-  const tgtR  = Math.max(34, 66 - level*2);
+  const ballR = Math.max(30, 55 - level*2);
+  const tgtR  = Math.max(45, 72 - level*2);
   const n     = Math.min(BALLS_PER_ROUND + Math.floor(level/2), 5);
 
   for(let i=0; i<n; i++){
     const c = COLORS[i % COLORS.length];
     targets.push({
-      x: 55 + Math.random()*(W()*0.35),
+      x: W()*0.12 + Math.random()*(W()*0.22),
       y: 85 + Math.random()*(H()-175),
       c, r:tgtR, id:i, done:false
     });
     balls.push({
-      x: W()*0.60 + Math.random()*(W()*0.33),
+      x: W()*0.62 + Math.random()*(W()*0.22),
       y: 85 + Math.random()*(H()-175),
       c, r:ballR, id:i,
       placed: false,
@@ -380,8 +380,8 @@ function loop(){
 
   if(running){
     // Fade hands if not seen recently
-    if(Date.now()-H_RIGHT._lastSeen > 500) H_RIGHT.visible=false;
-    if(Date.now()-H_LEFT._lastSeen  > 500) H_LEFT.visible=false;
+    if(Date.now()-H_RIGHT._lastSeen > 2000) H_RIGHT.visible=false;
+    if(Date.now()-H_LEFT._lastSeen  > 2000) H_LEFT.visible=false;
 
     processHand(H_RIGHT, 'Right');
     processHand(H_LEFT,  'Left');
@@ -406,12 +406,9 @@ function loop(){
 
 // ── MediaPipe results ──
 function onResults(results){
-  // Reset both hands to not visible — re-enable below
-  H_RIGHT.visible = false;
-  H_LEFT.visible  = false;
-
   if(!results.multiHandLandmarks || results.multiHandLandmarks.length===0){
-    document.getElementById('dbg').textContent='No hands detected';
+    document.getElementById('dbg').textContent='No hands detected — keep hand in camera view';
+    // Don't set visible=false here — let the timeout handle it gracefully
     return;
   }
 
@@ -419,30 +416,28 @@ function onResults(results){
 
   results.multiHandLandmarks.forEach((lms, i)=>{
     const raw   = results.multiHandedness[i].label;
-    const label = raw==='Left' ? 'Right' : 'Left'; // swap for front camera
+    const label = raw==='Left' ? 'Right' : 'Left';
     const hand  = label==='Right' ? H_RIGHT : H_LEFT;
 
-    // Palm centre = average of wrist + 4 knuckles
+    // Palm centre
     const idx = [0,5,9,13,17];
     let px=0, py=0;
     for(const j of idx){ px+=lms[j].x; py+=lms[j].y; }
     px/=idx.length; py/=idx.length;
 
-    // Map to canvas
     hand.x = px * W();
     hand.y = py * H();
-    hand.visible  = true;
+    hand.visible   = true;
     hand._lastSeen = Date.now();
 
-    // Fist: count how many fingers are curled
     const TIPS=[8,12,16,20], PIPS=[6,10,14,18];
     const curled   = TIPS.filter((t,i)=> lms[t].y > lms[PIPS[i]].y).length;
     const extended = TIPS.filter((t,i)=> lms[t].y < lms[PIPS[i]].y).length;
 
     if(curled   >= 3) hand.fist = true;
-    if(extended >= 1) hand.fist = false;  // just 1 finger open = release
+    if(extended >= 1) hand.fist = false;
 
-    dbgText += `${label}: ${hand.fist?'✊ FIST':'✋ open'} ready=${hand.readyToGrab} curled=${curled} extended=${extended} | `;
+    dbgText += `${label}: ${hand.fist?'✊':'✋'} curled=${curled} ext=${extended} | `;
   });
 
   document.getElementById('dbg').textContent = dbgText;
@@ -476,18 +471,24 @@ document.getElementById('btn-start').onclick = async function(){
   handsMP.setOptions({
     maxNumHands:2,
     modelComplexity:1,
-    minDetectionConfidence:0.6,
-    minTrackingConfidence:0.5,
+    minDetectionConfidence:0.3,
+    minTrackingConfidence:0.2,
   });
   handsMP.onResults(onResults);
 
   document.getElementById('dbg').textContent='Loading hand model...';
 
-  const camera = new Camera(video,{
-    onFrame: async()=>{ await handsMP.send({image:video}); },
-    width:640, height:480,
-  });
-  camera.start();
+  // Use direct rAF loop instead of Camera utility — more reliable
+  let detecting = false;
+  async function detectFrame(){
+    if(!detecting && video.readyState >= 2){
+      detecting = true;
+      try { await handsMP.send({image: video}); } catch(e){}
+      detecting = false;
+    }
+    requestAnimationFrame(detectFrame);
+  }
+  detectFrame();
 
   // Init hidden lastSeen
   H_RIGHT._lastSeen = 0;
