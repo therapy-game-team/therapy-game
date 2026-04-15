@@ -1,0 +1,608 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hand Therapy Game</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+
+  body {
+    background: #0a0a1a;
+    color: #fff;
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    height: 100vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+  }
+
+  #topbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 20px;
+    background: rgba(255,255,255,0.05);
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+    flex-shrink: 0;
+    z-index: 10;
+  }
+
+  #topbar h1 { font-size: 16px; color: #7ef7c8; font-weight: 600; }
+
+  #stats { display: flex; gap: 20px; }
+  .stat { text-align: center; }
+  .stat-label { font-size: 10px; color: rgba(255,255,255,0.4); text-transform: uppercase; letter-spacing: 1px; }
+  .stat-value { font-size: 20px; font-weight: 700; color: #7ef7c8; }
+
+  #game-wrap {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+  }
+
+  #game-canvas {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+  }
+
+  video {
+    position: absolute;
+    width: 1px; height: 1px;
+    opacity: 0; pointer-events: none;
+  }
+
+  #cam-preview {
+    position: absolute;
+    bottom: 16px; right: 16px;
+    width: 160px; height: 120px;
+    border-radius: 10px;
+    overflow: hidden;
+    border: 2px solid rgba(126,247,200,0.4);
+    z-index: 5;
+  }
+
+  #cam-preview canvas {
+    width: 100%; height: 100%;
+    transform: scaleX(-1);
+  }
+
+  #status {
+    position: absolute;
+    bottom: 16px; left: 16px;
+    font-size: 12px;
+    color: rgba(255,255,255,0.5);
+    z-index: 5;
+  }
+
+  #status span { color: #7ef7c8; }
+
+  /* Overlay screens */
+  .overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: rgba(10,10,26,0.93);
+    z-index: 20;
+    gap: 16px;
+  }
+
+  .overlay h2 { font-size: 28px; font-weight: 700; color: #7ef7c8; }
+  .overlay p  { color: rgba(255,255,255,0.55); font-size: 14px; text-align: center; max-width: 380px; line-height: 1.7; }
+
+  .btn {
+    padding: 12px 28px;
+    border-radius: 10px;
+    border: none;
+    font-size: 15px;
+    font-weight: 600;
+    cursor: pointer;
+    background: #7ef7c8;
+    color: #0a0a1a;
+    transition: transform 0.15s;
+  }
+  .btn:hover { transform: scale(1.05); }
+
+  .hand-legend {
+    display: flex;
+    gap: 16px;
+    font-size: 12px;
+  }
+  .hand-dot {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    display: inline-block;
+    margin-right: 5px;
+  }
+
+  #progress-bar-wrap {
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    height: 4px;
+    background: rgba(255,255,255,0.08);
+    z-index: 5;
+  }
+  #progress-bar {
+    height: 100%;
+    background: #7ef7c8;
+    width: 0%;
+    transition: width 0.3s;
+  }
+</style>
+</head>
+<body>
+
+<div id="topbar">
+  <h1>✋ Hand Therapy Game</h1>
+  <div id="stats">
+    <div class="stat"><div class="stat-label">Score</div><div class="stat-value" id="score">0</div></div>
+    <div class="stat"><div class="stat-label">Level</div><div class="stat-value" id="level">1</div></div>
+    <div class="stat"><div class="stat-label">Done</div><div class="stat-value" id="done">0</div></div>
+    <div class="stat"><div class="stat-label">Time</div><div class="stat-value" id="timer">3:00</div></div>
+  </div>
+  <div class="hand-legend">
+    <span><span class="hand-dot" style="background:#00c8ff"></span>Right</span>
+    <span><span class="hand-dot" style="background:#50ff78"></span>Left</span>
+  </div>
+</div>
+
+<div id="game-wrap">
+  <canvas id="game-canvas"></canvas>
+  <video id="video" autoplay playsinline muted></video>
+
+  <div id="cam-preview">
+    <canvas id="preview-canvas"></canvas>
+  </div>
+
+  <div id="status">Camera: <span id="cam-status">starting...</span></div>
+  <div id="progress-bar-wrap"><div id="progress-bar"></div></div>
+
+  <!-- Welcome screen -->
+  <div class="overlay" id="welcome">
+    <h2>✋ Hand Therapy Game</h2>
+    <p>Use your real hands to grab colored balls and place them in the matching target zones.<br><br>
+    <strong>Close your fist</strong> to grab &nbsp;|&nbsp; <strong>Open your hand</strong> to place<br><br>
+    Both hands work independently!</p>
+    <button class="btn" id="start-btn">Allow Camera & Play</button>
+    <p style="font-size:11px;color:rgba(255,255,255,0.3)">Camera stays on your device — nothing is uploaded</p>
+  </div>
+
+  <!-- Game over screen -->
+  <div class="overlay" id="gameover" style="display:none">
+    <h2>🎉 Session Complete!</h2>
+    <p id="results"></p>
+    <button class="btn" onclick="restartGame()">Play Again</button>
+  </div>
+</div>
+
+<script type="module">
+import { HandLandmarker, FilesetResolver } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/vision_bundle.mjs";
+
+// ── Canvas setup ──────────────────────────────────────
+const canvas   = document.getElementById('game-canvas');
+const ctx      = canvas.getContext('2d');
+const previewC = document.getElementById('preview-canvas');
+const prevCtx  = previewC.getContext('2d');
+const video    = document.getElementById('video');
+
+function resize() {
+  const wrap = document.getElementById('game-wrap');
+  canvas.width  = wrap.clientWidth;
+  canvas.height = wrap.clientHeight;
+}
+resize();
+window.addEventListener('resize', resize);
+
+// ── Colors ───────────────────────────────────────────
+const BALL_COLORS = ['#6b6bff','#3ddff0','#77cb6b','#ff964d','#ce6bff','#4dc8ff'];
+const HAND_COLORS = { Right: '#00c8ff', Left: '#50ff78' };
+
+// ── Game state ────────────────────────────────────────
+let score=0, level=1, success=0, progress=0;
+let balls=[], targets=[], particles=[];
+let sessionStart=null, sessionDuration=180;
+let gameRunning=false;
+const PER_LEVEL=6;
+
+// ── Hand state ────────────────────────────────────────
+const hands = {
+  Right: { x: canvas.width/2,  y: canvas.height/2, grabbing:false, visible:false, heldId:null, lastSeen:0 },
+  Left:  { x: canvas.width/2,  y: canvas.height/2, grabbing:false, visible:false, heldId:null, lastSeen:0 },
+};
+
+// ── Spawn objects ─────────────────────────────────────
+function spawn() {
+  balls=[]; targets=[];
+  for(const h of Object.values(hands)) { h.heldId=null; h.grabbing=false; }
+  const objSz = Math.max(22, 52 - level*2);
+  const tgtSz = Math.max(32, 68 - level*2);
+  const n = Math.min(3 + Math.floor(level/2), 6);
+  for(let i=0;i<n;i++){
+    const color = BALL_COLORS[i%BALL_COLORS.length];
+    targets.push({
+      x: 50 + Math.random()*(canvas.width*0.38-50),
+      y: 80 + Math.random()*(canvas.height-160),
+      color, size:tgtSz, id:i, filled:false
+    });
+    balls.push({
+      x: canvas.width*0.58 + Math.random()*(canvas.width*0.35),
+      y: 80 + Math.random()*(canvas.height-160),
+      color, size:objSz, id:i, placed:false, heldBy:null,
+      vx:0, vy:0
+    });
+  }
+}
+
+function restartGame() {
+  document.getElementById('gameover').style.display='none';
+  score=0; level=1; success=0; progress=0;
+  sessionStart=Date.now();
+  gameRunning=true;
+  spawn();
+  updateUI();
+}
+
+// ── Drawing ───────────────────────────────────────────
+function drawBackground() {
+  ctx.fillStyle='#0a0a1a';
+  ctx.fillRect(0,0,canvas.width,canvas.height);
+
+  // Grid dots
+  ctx.fillStyle='rgba(255,255,255,0.03)';
+  for(let x=0;x<canvas.width;x+=40)
+    for(let y=0;y<canvas.height;y+=40){
+      ctx.beginPath(); ctx.arc(x,y,1.5,0,Math.PI*2); ctx.fill();
+    }
+
+  // Divider
+  ctx.strokeStyle='rgba(255,255,255,0.06)';
+  ctx.lineWidth=1; ctx.setLineDash([6,6]);
+  ctx.beginPath();
+  ctx.moveTo(canvas.width/2,0);
+  ctx.lineTo(canvas.width/2,canvas.height);
+  ctx.stroke(); ctx.setLineDash([]);
+
+  // Labels
+  ctx.fillStyle='rgba(255,255,255,0.12)';
+  ctx.font='13px Segoe UI'; ctx.textAlign='center';
+  ctx.fillText('Target Zone',   canvas.width*0.25, 30);
+  ctx.fillText('Grab from here',canvas.width*0.75, 30);
+}
+
+function drawTarget(t) {
+  const pulse = Math.sin(Date.now()*0.003)*4;
+  const sz = t.size + pulse;
+  ctx.save();
+  // Glow
+  const g = ctx.createRadialGradient(t.x,t.y,0,t.x,t.y,sz+20);
+  g.addColorStop(0, t.color+'40'); g.addColorStop(1,'transparent');
+  ctx.fillStyle=g;
+  ctx.beginPath(); ctx.arc(t.x,t.y,sz+20,0,Math.PI*2); ctx.fill();
+
+  if(t.filled){
+    ctx.fillStyle=t.color+'50';
+    ctx.beginPath(); ctx.arc(t.x,t.y,sz,0,Math.PI*2); ctx.fill();
+    ctx.strokeStyle=t.color; ctx.lineWidth=3; ctx.setLineDash([]);
+    ctx.beginPath(); ctx.arc(t.x,t.y,sz,0,Math.PI*2); ctx.stroke();
+    // checkmark
+    ctx.strokeStyle='#fff'; ctx.lineWidth=3; ctx.lineCap='round';
+    ctx.beginPath();
+    ctx.moveTo(t.x-12,t.y); ctx.lineTo(t.x-3,t.y+10); ctx.lineTo(t.x+14,t.y-10);
+    ctx.stroke();
+  } else {
+    ctx.strokeStyle=t.color+'80'; ctx.lineWidth=2;
+    ctx.setLineDash([8,5]);
+    ctx.beginPath(); ctx.arc(t.x,t.y,sz,0,Math.PI*2); ctx.stroke();
+    ctx.setLineDash([]);
+  }
+  ctx.restore();
+}
+
+function drawBall(b) {
+  if(b.placed) return;
+  const held = b.heldBy !== null;
+  const sz = b.size * (held ? 1.2 : 1.0);
+
+  ctx.save();
+  const g = ctx.createRadialGradient(b.x-sz*0.3,b.y-sz*0.3,sz*0.05,b.x,b.y,sz);
+  g.addColorStop(0,'#fff6'); g.addColorStop(0.3,b.color); g.addColorStop(1,b.color+'aa');
+  // glow
+  ctx.shadowColor=b.color; ctx.shadowBlur=held?30:15;
+  ctx.fillStyle=g;
+  ctx.beginPath(); ctx.arc(b.x,b.y,sz,0,Math.PI*2); ctx.fill();
+  ctx.shadowBlur=0;
+  // shine
+  ctx.fillStyle='rgba(255,255,255,0.3)';
+  ctx.beginPath();
+  ctx.ellipse(b.x-sz*0.25,b.y-sz*0.25,sz*0.22,sz*0.13,-0.5,0,Math.PI*2);
+  ctx.fill();
+  if(held){
+    ctx.strokeStyle=HAND_COLORS[b.heldBy]+'cc';
+    ctx.lineWidth=2;
+    ctx.beginPath(); ctx.arc(b.x,b.y,sz+5,0,Math.PI*2); ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function drawHandCursor(h, label) {
+  if(!h.visible) return;
+  const color = HAND_COLORS[label];
+  const sz = h.grabbing ? 18 : 24;
+
+  ctx.save();
+  ctx.shadowColor=color; ctx.shadowBlur=20;
+  ctx.strokeStyle=color; ctx.lineWidth=3;
+  ctx.beginPath(); ctx.arc(h.x,h.y,sz,0,Math.PI*2); ctx.stroke();
+  ctx.shadowBlur=0;
+
+  ctx.fillStyle=color+'50';
+  ctx.beginPath(); ctx.arc(h.x,h.y,sz*0.4,0,Math.PI*2); ctx.fill();
+
+  if(!h.grabbing){
+    const angles=[-0.6,-0.2,0.2,0.6,1.1];
+    const lengths=[28,33,33,28,20];
+    ctx.strokeStyle=color+'aa'; ctx.lineWidth=3; ctx.lineCap='round';
+    for(let i=0;i<5;i++){
+      const a=angles[i]-Math.PI/2;
+      ctx.beginPath();
+      ctx.moveTo(h.x,h.y);
+      ctx.lineTo(h.x+Math.cos(a)*lengths[i],h.y+Math.sin(a)*lengths[i]);
+      ctx.stroke();
+    }
+  }
+
+  ctx.fillStyle=color;
+  ctx.font='bold 11px Segoe UI'; ctx.textAlign='center';
+  ctx.fillText(h.grabbing?'GRAB':'OPEN', h.x, h.y-sz-8);
+  ctx.restore();
+}
+
+function drawParticles() {
+  for(const p of particles){
+    ctx.save();
+    ctx.globalAlpha=p.life;
+    ctx.fillStyle=p.color;
+    ctx.beginPath(); ctx.arc(p.x,p.y,p.size*p.life,0,Math.PI*2); ctx.fill();
+    ctx.restore();
+  }
+}
+
+function drawNoHand() {
+  if(!hands.Right.visible && !hands.Left.visible){
+    ctx.fillStyle='rgba(255,255,255,0.3)';
+    ctx.font='22px Segoe UI'; ctx.textAlign='center';
+    ctx.fillText('Show your hands to play!', canvas.width/2, canvas.height/2);
+  }
+}
+
+function spawnParticles(x,y,color){
+  for(let i=0;i<18;i++){
+    const a=Math.random()*Math.PI*2, s=2+Math.random()*5;
+    particles.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,
+                    color,life:1,size:4+Math.random()*6});
+  }
+}
+
+// ── Flash message ─────────────────────────────────────
+let flashMsg='', flashTime=0;
+function showFlash(msg){ flashMsg=msg; flashTime=Date.now(); }
+
+function drawFlash(){
+  if(!flashMsg || Date.now()-flashTime>1200) return;
+  const alpha = Math.max(0,(1200-(Date.now()-flashTime))/1200);
+  ctx.save();
+  ctx.globalAlpha=alpha;
+  ctx.fillStyle='#ffd700';
+  ctx.font='bold 56px Segoe UI'; ctx.textAlign='center';
+  ctx.fillText(flashMsg, canvas.width/2, canvas.height/2);
+  ctx.restore();
+}
+
+// ── Game logic ────────────────────────────────────────
+function dist(a,b){ return Math.hypot(a.x-b.x,a.y-b.y); }
+
+function updateHand(h, label){
+  if(!h.visible) return;
+
+  // Try grab
+  if(h.grabbing && h.heldId===null){
+    for(const b of balls){
+      if(b.placed || b.heldBy!==null) continue;
+      if(Math.hypot(h.x-b.x,h.y-b.y)<b.size+40){
+        b.heldBy=label; h.heldId=b.id; break;
+      }
+    }
+  }
+
+  // Move held ball
+  if(h.heldId!==null && h.grabbing){
+    const b=balls.find(b=>b.id===h.heldId);
+    if(b){ b.x+=(h.x-b.x)*0.5; b.y+=(h.y-b.y)*0.5; }
+  }
+
+  // Release
+  if(!h.grabbing && h.heldId!==null){
+    const b=balls.find(b=>b.id===h.heldId);
+    if(b){
+      const tgt=targets.find(t=>t.id===b.id);
+      if(tgt && Math.hypot(b.x-tgt.x,b.y-tgt.y)<tgt.size+35){
+        b.x=tgt.x; b.y=tgt.y; b.placed=true; tgt.filled=true;
+        spawnParticles(tgt.x,tgt.y,tgt.color);
+        score+=10*level; success++; progress++;
+        showFlash(`+${10*level}!`);
+        updateUI();
+        if(progress>=PER_LEVEL){ progress=0; level++; showFlash(`Level ${level}!`); spawn(); }
+        else if(balls.every(b=>b.placed)){ spawn(); }
+      }
+      b.heldBy=null;
+    }
+    h.heldId=null;
+  }
+
+  // Drop if hand disappears
+  if(!h.visible && h.heldId!==null){
+    const b=balls.find(b=>b.id===h.heldId);
+    if(b) b.heldBy=null;
+    h.heldId=null;
+  }
+}
+
+function updateParticles(){
+  particles=particles.filter(p=>p.life>0);
+  for(const p of particles){
+    p.x+=p.vx; p.y+=p.vy; p.vy+=0.1;
+    p.life-=0.025; p.size*=0.97;
+  }
+}
+
+function updateTimer(){
+  if(!sessionStart) return;
+  const elapsed=(Date.now()-sessionStart)/1000;
+  const remain=Math.max(0,sessionDuration-elapsed);
+  const m=Math.floor(remain/60), s=Math.floor(remain%60);
+  document.getElementById('timer').textContent=`${m}:${s.toString().padStart(2,'0')}`;
+  if(remain<=0) endGame();
+}
+
+function updateUI(){
+  document.getElementById('score').textContent=score;
+  document.getElementById('level').textContent=level;
+  document.getElementById('done').textContent=success;
+  document.getElementById('progress-bar').style.width=(progress/PER_LEVEL*100)+'%';
+}
+
+function endGame(){
+  gameRunning=false;
+  const elapsed=Math.floor((Date.now()-sessionStart)/1000);
+  const m=Math.floor(elapsed/60), s=elapsed%60;
+  document.getElementById('results').innerHTML=
+    `Score: ${score} &nbsp;|&nbsp; Level: ${level} &nbsp;|&nbsp; Placed: ${success}<br>Session time: ${m}:${s.toString().padStart(2,'0')}`;
+  document.getElementById('gameover').style.display='flex';
+}
+
+// ── Main game loop ────────────────────────────────────
+function gameLoop(){
+  resize();
+  drawBackground();
+
+  if(gameRunning){
+    updateParticles();
+    for(const [label,h] of Object.entries(hands)){
+      if(Date.now()-h.lastSeen>300) h.visible=false;
+      updateHand(h,label);
+    }
+    updateTimer();
+  }
+
+  for(const t of targets) drawTarget(t);
+  for(const b of balls)   drawBall(b);
+  drawParticles();
+  for(const [label,h] of Object.entries(hands)) drawHandCursor(h,label);
+  drawFlash();
+  drawNoHand();
+
+  requestAnimationFrame(gameLoop);
+}
+
+// ── MediaPipe setup ───────────────────────────────────
+let handLandmarker=null, lastVideoTime=-1;
+
+async function initMediaPipe(){
+  document.getElementById('cam-status').textContent='loading model...';
+  const vision = await FilesetResolver.forVisionTasks(
+    "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/wasm"
+  );
+  handLandmarker = await HandLandmarker.createFromOptions(vision, {
+    baseOptions: {
+      modelAssetPath: "https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/latest/hand_landmarker.task",
+      delegate: "GPU"
+    },
+    runningMode: "VIDEO",
+    numHands: 2,
+    minHandDetectionConfidence: 0.5,
+    minHandPresenceConfidence: 0.5,
+    minTrackingConfidence:     0.5,
+  });
+  document.getElementById('cam-status').textContent='ready';
+  detectLoop();
+}
+
+function detectLoop(){
+  if(!handLandmarker){ requestAnimationFrame(detectLoop); return; }
+  if(video.readyState>=2 && video.currentTime!==lastVideoTime){
+    lastVideoTime=video.currentTime;
+    const result=handLandmarker.detectForVideo(video, performance.now());
+
+    // Reset visibility
+    for(const h of Object.values(hands)) h.visible=false;
+
+    if(result.handedness && result.handedness.length>0){
+      result.handedness.forEach((hArr,i)=>{
+        const label=hArr[0].categoryName; // "Left" or "Right"
+        const h=hands[label];
+        if(!h) return;
+        const lms=result.landmarks[i];
+
+        // Palm centre
+        const mcpIdx=[5,9,13,17,0];
+        let px=0,py=0;
+        for(const idx of mcpIdx){ px+=lms[idx].x; py+=lms[idx].y; }
+        px=px/mcpIdx.length; py=py/mcpIdx.length;
+
+        // Map to canvas — mirror x because video is mirrored
+        h.x += ((1-px)*canvas.width  - h.x) * 0.85;
+        h.y += (py     *canvas.height - h.y) * 0.85;
+        h.visible=true; h.lastSeen=Date.now();
+
+        // Grab detection
+        const tips=[8,12,16,20], pips=[6,10,14,18];
+        const closed=tips.filter((t,i)=>lms[t].y>lms[pips[i]].y).length;
+        const open  =tips.filter((t,i)=>lms[t].y<lms[pips[i]].y).length;
+        if(closed>=3) h.grabbing=true;
+        else if(open>=3) h.grabbing=false;
+      });
+    }
+
+    // Camera preview
+    previewC.width=160; previewC.height=120;
+    prevCtx.drawImage(video,0,0,160,120);
+  }
+  requestAnimationFrame(detectLoop);
+}
+
+// ── Camera ────────────────────────────────────────────
+async function startCamera(){
+  try{
+    const stream=await navigator.mediaDevices.getUserMedia({
+      video:{ width:640, height:480, facingMode:'user' }
+    });
+    video.srcObject=stream;
+    await video.play();
+    document.getElementById('cam-status').textContent='active';
+    initMediaPipe();
+  } catch(e){
+    document.getElementById('cam-status').textContent='camera denied';
+    console.error(e);
+  }
+}
+
+// ── Start ─────────────────────────────────────────────
+document.getElementById('start-btn').onclick=async()=>{
+  document.getElementById('welcome').style.display='none';
+  await startCamera();
+  spawn();
+  sessionStart=Date.now();
+  gameRunning=true;
+  updateUI();
+};
+
+window.restartGame=restartGame;
+
+gameLoop();
+</script>
+</body>
+</html>
