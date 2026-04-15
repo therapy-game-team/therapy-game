@@ -15,7 +15,7 @@ body { background:#0a0a1a; color:#fff; font-family:'Segoe UI',sans-serif; overfl
 .sv { font-size:18px; font-weight:700; color:#7ef7c8; }
 #wrap { flex:1; position:relative; overflow:hidden; }
 #gc { position:absolute; inset:0; width:100%; height:100%; }
-#dbg { position:absolute; top:65px; left:10px; font-size:12px; color:#ffd700; background:rgba(0,0,0,0.6); padding:6px 12px; border-radius:8px; z-index:9; line-height:1.8; max-width:400px; }
+#dbg { position:absolute; top:65px; left:10px; font-size:12px; color:#ffd700; background:rgba(0,0,0,0.6); padding:6px 12px; border-radius:8px; z-index:9; line-height:1.8; }
 #prev { position:absolute; bottom:14px; right:14px; width:180px; height:135px; border-radius:10px; overflow:hidden; border:2px solid #7ef7c840; z-index:5; }
 #prev video { width:100%; height:100%; object-fit:cover; transform:scaleX(-1); display:block; }
 #pb { position:absolute; bottom:0; left:0; right:0; height:4px; background:rgba(255,255,255,0.07); }
@@ -51,9 +51,9 @@ body { background:#0a0a1a; color:#fff; font-family:'Segoe UI',sans-serif; overfl
   <div class="overlay" id="ov-welcome">
     <h2>✋ Hand Therapy Game</h2>
     <p>
-      Pinch your <strong style="color:#7ef7c8">thumb + index finger</strong> together to grab a ball.<br>
-      Move it to the matching colored target.<br>
-      Open your hand to place it.<br><br>
+      <strong style="color:#7ef7c8">Close your fist</strong> over a ball to grab it.<br>
+      Move it to the matching colored target zone.<br>
+      <strong style="color:#7ef7c8">Open your hand</strong> to place it.<br><br>
       Both hands work at the same time!
     </p>
     <button class="btn" id="btn-start">Allow Camera &amp; Play</button>
@@ -67,16 +67,12 @@ body { background:#0a0a1a; color:#fff; font-family:'Segoe UI',sans-serif; overfl
   </div>
 </div>
 
-<!-- MediaPipe Hands (legacy API — most compatible) -->
 <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
-<script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
 <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
 
 <script>
-// ── Canvas ────────────────────────────────────────────
 const gc  = document.getElementById('gc');
 const ctx = gc.getContext('2d');
-
 function W(){ return gc.width; }
 function H(){ return gc.height; }
 function resize(){
@@ -85,46 +81,54 @@ function resize(){
 }
 resize(); window.addEventListener('resize',resize);
 
-// ── Constants ─────────────────────────────────────────
 const BCOLS=['#6b6bff','#3ddff0','#77cb6b','#ff964d','#ce6bff','#4dc8ff'];
 const HCOL={ Right:'#00c8ff', Left:'#50ff78' };
 const PER_LEVEL=5, SESSION=180;
-const PINCH_GRAB=0.07;
 
-// ── Game State ────────────────────────────────────────
 let score=0,level=1,success=0,prog=0;
 let balls=[],targets=[],parts=[];
 let t0=null,running=false;
 let flashMsg='',flashAt=0;
 
+// Hand state — grabbing is now based on fist (fingers curled)
 const HS={
-  Right:{ x:200,y:300,pinch:1,visible:false,lastSeen:0,heldId:null },
-  Left: { x:500,y:300,pinch:1,visible:false,lastSeen:0,heldId:null },
+  Right:{ x:200,y:300,grabbing:false,visible:false,lastSeen:0,heldId:null },
+  Left: { x:500,y:300,grabbing:false,visible:false,lastSeen:0,heldId:null },
 };
 
-function isGrab(h){ return h.pinch<PINCH_GRAB; }
+// ── Fist detection ────────────────────────────────────
+// Count how many fingers are curled (tip below pip joint)
+function countCurled(lms){
+  const tips=[8,12,16,20], pips=[6,10,14,18];
+  return tips.filter((t,i)=>lms[t].y > lms[pips[i]].y).length;
+}
+function countExtended(lms){
+  const tips=[8,12,16,20], pips=[6,10,14,18];
+  return tips.filter((t,i)=>lms[t].y < lms[pips[i]].y).length;
+}
 
 // ── Spawn ─────────────────────────────────────────────
 function spawn(){
   balls=[]; targets=[];
-  for(const h of Object.values(HS)) h.heldId=null;
+  // Don't reset heldId here — let updateHand handle drops
   const os=Math.max(24,52-level*2), ts=Math.max(34,68-level*2);
   const n=Math.min(3+Math.floor(level/2),5);
   for(let i=0;i<n;i++){
     const c=BCOLS[i%BCOLS.length];
-    targets.push({x:50+Math.random()*(W()*0.36),y:80+Math.random()*(H()-170),c,r:ts,id:i,done:false});
-    balls.push({x:W()*0.6+Math.random()*(W()*0.33),y:80+Math.random()*(H()-170),c,r:os,id:i,placed:false,heldBy:null});
+    targets.push({x:55+Math.random()*(W()*0.35),y:85+Math.random()*(H()-175),c,r:ts,id:i,done:false});
+    balls.push({x:W()*0.6+Math.random()*(W()*0.33),y:85+Math.random()*(H()-175),c,r:os,id:i,placed:false,heldBy:null});
   }
 }
 
 function restart(){
   document.getElementById('ov-over').style.display='none';
   score=0;level=1;success=0;prog=0;
+  for(const h of Object.values(HS)){ h.heldId=null; h.grabbing=false; }
   t0=Date.now();running=true;
   spawn();ui();
 }
 
-// ── Draw ─────────────────────────────────────────────
+// ── Drawing ───────────────────────────────────────────
 function drawTarget(t){
   const p=Math.sin(Date.now()*.003)*4,r=t.r+p;
   const g=ctx.createRadialGradient(t.x,t.y,0,t.x,t.y,r+22);
@@ -137,8 +141,8 @@ function drawTarget(t){
     ctx.beginPath();ctx.moveTo(t.x-12,t.y);ctx.lineTo(t.x-3,t.y+10);ctx.lineTo(t.x+14,t.y-10);ctx.stroke();
   } else {
     ctx.save();ctx.setLineDash([8,5]);
-    ctx.beginPath();ctx.arc(t.x,t.y,r,0,Math.PI*2);ctx.strokeStyle=t.c+'88';ctx.lineWidth=2;ctx.stroke();
-    ctx.restore();
+    ctx.beginPath();ctx.arc(t.x,t.y,r,0,Math.PI*2);
+    ctx.strokeStyle=t.c+'88';ctx.lineWidth=2;ctx.stroke();ctx.restore();
   }
 }
 
@@ -153,20 +157,24 @@ function drawBall(b){
   ctx.shadowBlur=0;
   ctx.fillStyle='rgba(255,255,255,0.25)';
   ctx.beginPath();ctx.ellipse(b.x-r*.25,b.y-r*.25,r*.2,r*.12,-.5,0,Math.PI*2);ctx.fill();
-  if(held){ctx.strokeStyle=HCOL[b.heldBy]+'cc';ctx.lineWidth=2.5;ctx.beginPath();ctx.arc(b.x,b.y,r+6,0,Math.PI*2);ctx.stroke();}
+  if(held){
+    ctx.strokeStyle=HCOL[b.heldBy]+'cc';ctx.lineWidth=2.5;
+    ctx.beginPath();ctx.arc(b.x,b.y,r+6,0,Math.PI*2);ctx.stroke();
+  }
   ctx.restore();
 }
 
 function drawHand(h,label){
   if(!h.visible)return;
-  const col=HCOL[label],grab=isGrab(h),r=grab?14:22;
+  const col=HCOL[label],r=h.grabbing?16:24;
   ctx.save();
-  ctx.shadowColor=col;ctx.shadowBlur=16;
+  ctx.shadowColor=col;ctx.shadowBlur=18;
   ctx.beginPath();ctx.arc(h.x,h.y,r,0,Math.PI*2);
   ctx.fillStyle=col+'44';ctx.fill();
   ctx.strokeStyle=col;ctx.lineWidth=3;ctx.stroke();
   ctx.shadowBlur=0;
-  if(!grab){
+  if(!h.grabbing){
+    // open hand fingers
     const ang=[-0.6,-0.2,0.2,0.6,1.1],len=[25,30,30,25,18];
     ctx.strokeStyle=col+'99';ctx.lineWidth=3;ctx.lineCap='round';
     for(let i=0;i<5;i++){
@@ -175,13 +183,13 @@ function drawHand(h,label){
       ctx.lineTo(h.x+Math.cos(a)*len[i],h.y+Math.sin(a)*len[i]);ctx.stroke();
     }
   } else {
-    ctx.setLineDash([4,4]);ctx.beginPath();ctx.arc(h.x,h.y,r+8,0,Math.PI*2);ctx.strokeStyle=col;ctx.lineWidth=1.5;ctx.stroke();ctx.setLineDash([]);
+    // fist ring
+    ctx.setLineDash([4,4]);
+    ctx.beginPath();ctx.arc(h.x,h.y,r+8,0,Math.PI*2);
+    ctx.strokeStyle=col;ctx.lineWidth=1.5;ctx.stroke();ctx.setLineDash([]);
   }
   ctx.fillStyle=col;ctx.font='bold 11px Segoe UI';ctx.textAlign='center';
-  ctx.fillText(`${label[0]} ${grab?'GRAB':'OPEN'}`,h.x,h.y-r-8);
-  const bw=44,filled=Math.max(0,Math.min(1,1-h.pinch/0.15))*bw;
-  ctx.fillStyle='rgba(255,255,255,0.12)';ctx.fillRect(h.x-bw/2,h.y+r+6,bw,4);
-  ctx.fillStyle=grab?'#ff6060':col;ctx.fillRect(h.x-bw/2,h.y+r+6,filled,4);
+  ctx.fillText(`${label[0]} ${h.grabbing?'✊ GRAB':'✋ OPEN'}`,h.x,h.y-r-8);
   ctx.restore();
 }
 
@@ -199,43 +207,68 @@ function burst(x,y,c){
   }
 }
 
-let flashMsg2='',flashAt2=0;
-function flash(msg){flashMsg2=msg;flashAt2=Date.now();}
+function flash(msg){flashMsg=msg;flashAt=Date.now();}
 function drawFlash(){
-  if(!flashMsg2||Date.now()-flashAt2>1200)return;
-  const a=Math.max(0,(1200-(Date.now()-flashAt2))/1200);
-  ctx.save();ctx.globalAlpha=a;ctx.fillStyle='#ffd700';ctx.font='bold 56px Segoe UI';ctx.textAlign='center';
-  ctx.fillText(flashMsg2,W()/2,H()/2);ctx.restore();
+  if(!flashMsg||Date.now()-flashAt>1200)return;
+  const a=Math.max(0,(1200-(Date.now()-flashAt))/1200);
+  ctx.save();ctx.globalAlpha=a;ctx.fillStyle='#ffd700';
+  ctx.font='bold 56px Segoe UI';ctx.textAlign='center';
+  ctx.fillText(flashMsg,W()/2,H()/2);ctx.restore();
 }
 
-// ── Logic ─────────────────────────────────────────────
+// ── Game logic ────────────────────────────────────────
 function updateHand(h,label){
-  const grab=isGrab(h);
+  // Drop ball if hand not visible
   if(!h.visible){
-    if(h.heldId!==null){const b=balls.find(b=>b.id===h.heldId);if(b)b.heldBy=null;h.heldId=null;}
+    if(h.heldId!==null){
+      const b=balls.find(b=>b.id===h.heldId);
+      if(b) b.heldBy=null;
+      h.heldId=null;
+    }
     return;
   }
-  if(grab&&h.heldId===null){
+
+  // Try to grab a nearby ball when fist is closed
+  if(h.grabbing && h.heldId===null){
     for(const b of balls){
-      if(b.placed||b.heldBy!==null)continue;
-      if(Math.hypot(h.x-b.x,h.y-b.y)<b.r+55){b.heldBy=label;h.heldId=b.id;break;}
+      if(b.placed || b.heldBy!==null) continue;
+      if(Math.hypot(h.x-b.x,h.y-b.y) < b.r+55){
+        b.heldBy=label;
+        h.heldId=b.id;
+        break;
+      }
     }
   }
-  if(grab&&h.heldId!==null){
+
+  // Drag ball with hand
+  if(h.grabbing && h.heldId!==null){
     const b=balls.find(b=>b.id===h.heldId);
-    if(b){b.x+=(h.x-b.x)*.55;b.y+=(h.y-b.y)*.55;}
+    if(b){ b.x+=(h.x-b.x)*.6; b.y+=(h.y-b.y)*.6; }
   }
-  if(!grab&&h.heldId!==null){
+
+  // Release ball when hand opens
+  if(!h.grabbing && h.heldId!==null){
     const b=balls.find(b=>b.id===h.heldId);
     if(b){
       const t=targets.find(t=>t.id===b.id);
-      if(t&&Math.hypot(b.x-t.x,b.y-t.y)<t.r+45){
-        b.x=t.x;b.y=t.y;b.placed=true;t.done=true;
+      if(t && Math.hypot(b.x-t.x,b.y-t.y)<t.r+45){
+        // SUCCESS — place ball
+        b.x=t.x; b.y=t.y; b.placed=true; t.done=true;
         burst(t.x,t.y,t.c);
-        score+=10*level;success++;prog++;
-        flash(`+${10*level}!`);ui();
-        if(prog>=PER_LEVEL){prog=0;level++;flash(`Level ${level}!`);spawn();}
-        else if(balls.every(b=>b.placed))spawn();
+        score+=10*level; success++; prog++;
+        flash(`+${10*level}!`); ui();
+        if(prog>=PER_LEVEL){
+          prog=0; level++;
+          flash(`Level ${level}!`);
+          // Clear heldId before spawning new balls
+          h.heldId=null;
+          spawn();
+          return;
+        } else if(balls.every(b=>b.placed)){
+          h.heldId=null;
+          spawn();
+          return;
+        }
       }
       b.heldBy=null;
     }
@@ -255,38 +288,43 @@ function tick(){
   const rem=Math.max(0,SESSION-(Date.now()-t0)/1000);
   const m=Math.floor(rem/60),s=Math.floor(rem%60);
   document.getElementById('tm').textContent=`${m}:${s.toString().padStart(2,'0')}`;
-  if(rem<=0&&running){running=false;endGame();}
+  if(rem<=0&&running){ running=false; endGame(); }
 }
 
 function endGame(){
   const e=Math.floor((Date.now()-t0)/1000);
-  document.getElementById('ov-results').innerHTML=`Score:${score} | Level:${level} | Placed:${success}`;
+  document.getElementById('ov-results').innerHTML=
+    `Score: ${score} &nbsp;|&nbsp; Level: ${level} &nbsp;|&nbsp; Placed: ${success}`;
   document.getElementById('ov-over').style.display='flex';
 }
 
 // ── Main loop ─────────────────────────────────────────
 function loop(){
   resize();
-  ctx.fillStyle='#0a0a1a';ctx.fillRect(0,0,W(),H());
+  ctx.fillStyle='#0a0a1a'; ctx.fillRect(0,0,W(),H());
   ctx.fillStyle='rgba(255,255,255,0.025)';
-  for(let x=0;x<W();x+=40)for(let y=0;y<H();y+=40){ctx.beginPath();ctx.arc(x,y,1.5,0,Math.PI*2);ctx.fill();}
+  for(let x=0;x<W();x+=40)
+    for(let y=0;y<H();y+=40){
+      ctx.beginPath();ctx.arc(x,y,1.5,0,Math.PI*2);ctx.fill();
+    }
   ctx.save();ctx.strokeStyle='rgba(255,255,255,0.07)';ctx.lineWidth=1;ctx.setLineDash([6,6]);
   ctx.beginPath();ctx.moveTo(W()/2,0);ctx.lineTo(W()/2,H());ctx.stroke();ctx.restore();
   ctx.fillStyle='rgba(255,255,255,0.12)';ctx.font='13px Segoe UI';ctx.textAlign='center';
-  ctx.fillText('Target Zone',W()*.25,28);ctx.fillText('Grab from here',W()*.75,28);
+  ctx.fillText('Target Zone',W()*.25,28);
+  ctx.fillText('Grab from here',W()*.75,28);
 
   if(running){
     parts=parts.filter(p=>p.l>0);
     for(const p of parts){p.x+=p.vx;p.y+=p.vy;p.vy+=.1;p.l-=.025;p.s*=.97;}
-    for(const h of Object.values(HS))if(Date.now()-h.lastSeen>500)h.visible=false;
-    for(const [lbl,h] of Object.entries(HS))updateHand(h,lbl);
+    for(const h of Object.values(HS)) if(Date.now()-h.lastSeen>500) h.visible=false;
+    for(const [lbl,h] of Object.entries(HS)) updateHand(h,lbl);
     tick();
   }
 
-  for(const t of targets)drawTarget(t);
-  for(const b of balls)drawBall(b);
+  for(const t of targets) drawTarget(t);
+  for(const b of balls)   drawBall(b);
   drawParts();
-  for(const [lbl,h] of Object.entries(HS))drawHand(h,lbl);
+  for(const [lbl,h] of Object.entries(HS)) drawHand(h,lbl);
   drawFlash();
 
   if(!Object.values(HS).some(h=>h.visible)&&running){
@@ -296,56 +334,61 @@ function loop(){
   requestAnimationFrame(loop);
 }
 
-// ── MediaPipe Hands (legacy - very compatible) ────────
+// ── MediaPipe ─────────────────────────────────────────
 function onResults(results){
   const dbg=document.getElementById('dbg');
   if(!results.multiHandLandmarks||results.multiHandLandmarks.length===0){
-    dbg.textContent='No hands detected — show hand to camera';
-    for(const h of Object.values(HS))h.visible=false;
+    dbg.textContent='No hands detected';
+    for(const h of Object.values(HS)) h.visible=false;
     return;
   }
 
-  // Reset
-  for(const h of Object.values(HS))h.visible=false;
+  // Reset visibility — will re-enable below for each detected hand
+  for(const h of Object.values(HS)) h.visible=false;
 
   results.multiHandLandmarks.forEach((lms,i)=>{
     const raw=results.multiHandedness[i].label;
-    // front camera mirrors left/right
-    const label=raw==='Left'?'Right':'Left';
-    const h=HS[label]; if(!h)return;
+    const label=raw==='Left'?'Right':'Left'; // swap for front camera
+    const h=HS[label]; if(!h) return;
 
-    // Palm centre
+    // Palm centre (wrist + knuckles)
     const mi=[0,5,9,13,17];
     let px=0,py=0;
     for(const idx of mi){px+=lms[idx].x;py+=lms[idx].y;}
-    px/=mi.length;py/=mi.length;
+    px/=mi.length; py/=mi.length;
 
-    // Map normalised → canvas pixels
-    // x is already mirrored by MediaPipe for selfie camera
-    h.x=px*W();
-    h.y=py*H();
-    h.visible=true;
-    h.lastSeen=Date.now();
+    // Direct mapping — fast response
+    h.x = px * W();
+    h.y = py * H();
+    h.visible = true;
+    h.lastSeen = Date.now();
 
-    // Pinch: thumb tip (4) to index tip (8)
-    h.pinch=Math.hypot(lms[4].x-lms[8].x,lms[4].y-lms[8].y);
+    // Fist detection: 3+ fingers curled = grabbing
+    const curled   = countCurled(lms);
+    const extended = countExtended(lms);
 
-    dbg.textContent=`${label}: pinch=${h.pinch.toFixed(3)} ${isGrab(h)?'✊ GRABBING':'✋ open'} | x=${Math.round(h.x)} y=${Math.round(h.y)}`;
+    if(curled >= 3)    h.grabbing = true;
+    if(extended >= 3)  h.grabbing = false;
+
+    dbg.textContent =
+      `${label}: curled=${curled} extended=${extended} → ${h.grabbing?'✊ GRABBING':'✋ open'} | pos=(${Math.round(h.x)},${Math.round(h.y)})`;
   });
 }
 
-// ── Start ─────────────────────────────────────────────
-document.getElementById('btn-start').onclick=async function(){
+// ── Camera start ──────────────────────────────────────
+document.getElementById('btn-start').onclick = async function(){
   document.getElementById('ov-welcome').style.display='none';
   document.getElementById('dbg').textContent='Starting camera...';
 
-  const video=document.createElement('video');
+  const video = document.createElement('video');
   video.autoplay=true; video.playsinline=true; video.muted=true;
 
   try{
-    const stream=await navigator.mediaDevices.getUserMedia({video:{width:640,height:480,facingMode:'user'}});
-    video.srcObject=stream;
-    document.getElementById('pvid').srcObject=stream;
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video:{ width:640, height:480, facingMode:'user' }
+    });
+    video.srcObject = stream;
+    document.getElementById('pvid').srcObject = stream;
     await video.play();
     await document.getElementById('pvid').play();
   } catch(e){
@@ -353,24 +396,24 @@ document.getElementById('btn-start').onclick=async function(){
     return;
   }
 
-  const hands=new Hands({locateFile:f=>`https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`});
-  hands.setOptions({
-    maxNumHands:2,
-    modelComplexity:1,
-    minDetectionConfidence:0.6,
-    minTrackingConfidence:0.6,
+  const handsMP = new Hands({
+    locateFile: f=>`https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`
   });
-  hands.onResults(onResults);
+  handsMP.setOptions({
+    maxNumHands: 2,
+    modelComplexity: 1,
+    minDetectionConfidence: 0.6,
+    minTrackingConfidence: 0.5,
+  });
+  handsMP.onResults(onResults);
 
   document.getElementById('dbg').textContent='Loading hand model...';
 
-  const camera=new Camera(video,{
-    onFrame:async()=>{ await hands.send({image:video}); },
+  const camera = new Camera(video,{
+    onFrame: async()=>{ await handsMP.send({image:video}); },
     width:640, height:480,
   });
   camera.start();
-
-  document.getElementById('dbg').textContent='Camera ready — show your hands!';
 
   spawn();
   t0=Date.now();
