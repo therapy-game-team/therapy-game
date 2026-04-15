@@ -85,8 +85,8 @@ const PINCH_THRESH=0.07; // pinch distance threshold
 // Cursor follows index fingertip always
 // Pinch = grab if not holding, release if holding
 const HANDS={
-  Right:{x:300,y:300,pinch:false,prevPinch:false,visible:true,lastSeen:0,ballId:null},
-  Left: {x:500,y:300,pinch:false,prevPinch:false,visible:true,lastSeen:0,ballId:null},
+  Right:{x:300,y:300,pinch:false,prevPinch:false,visible:true,lastSeen:0,ballId:null,lastPinchAt:0},
+  Left: {x:500,y:300,pinch:false,prevPinch:false,visible:true,lastSeen:0,ballId:null,lastPinchAt:0},
 };
 
 let score=0,level=1,placed=0,totalDone=0;
@@ -132,8 +132,9 @@ function burst(x,y,c){
 
 // ── GAME LOGIC ────────────────────────────────────────
 function stepHand(h,label){
-  // Detect pinch START (not held, just the moment of pinching)
-  const justPinched = h.pinch && !h.prevPinch;
+  const now=Date.now();
+  const justPinched = h.pinch && !h.prevPinch && (now-h.lastPinchAt>600);
+  if(justPinched) h.lastPinchAt=now;
   h.prevPinch = h.pinch;
 
   if(h.ballId===null){
@@ -142,7 +143,8 @@ function stepHand(h,label){
       for(const b of balls){
         if(b.placed||b.owner!==null)continue;
         if(Math.hypot(h.x-b.x,h.y-b.y)<b.r+65){
-          b.owner=label;h.ballId=b.id;break;
+          b.owner=label;h.ballId=b.id;
+          return; // stop here — don't also try to release
         }
       }
     }
@@ -160,8 +162,8 @@ function stepHand(h,label){
 
     // Pinch again to release/place
     if(justPinched){
-      b.owner=null;h.ballId=null;
       const t=targets.find(t=>t.id===b.id);
+      b.owner=null;h.ballId=null;
       if(t&&!t.done&&Math.hypot(b.x-t.x,b.y-t.y)<t.r+60){
         b.x=t.x;b.y=t.y;b.placed=true;t.done=true;
         burst(t.x,t.y,t.c);
@@ -172,7 +174,6 @@ function stepHand(h,label){
           setTimeout(spawnRound,1000);
         }
       }
-      // If not on target — ball drops, can grab again
     }
   }
 }
