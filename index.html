@@ -3,187 +3,383 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Hand Tracker Test</title>
+<title>Hand Therapy Game</title>
 <style>
 * { margin:0; padding:0; box-sizing:border-box; }
-body { background:#0a0a1a; color:#fff; font-family:'Segoe UI',sans-serif; display:flex; flex-direction:column; align-items:center; padding:20px; gap:16px; }
-h1 { color:#7ef7c8; font-size:20px; }
-#container { position:relative; width:640px; height:480px; border:2px solid #7ef7c840; border-radius:12px; overflow:hidden; }
-video { width:100%; height:100%; object-fit:cover; transform:scaleX(-1); display:block; }
-canvas { position:absolute; top:0; left:0; width:100%; height:100%; }
-#info { background:rgba(0,0,0,0.7); border:1px solid #7ef7c840; border-radius:10px; padding:14px 20px; width:640px; font-size:13px; line-height:2; }
-#info span { color:#7ef7c8; font-weight:600; }
-.row { display:flex; justify-content:space-between; }
-button { padding:12px 28px; background:#7ef7c8; color:#0a0a1a; border:none; border-radius:10px; font-size:14px; font-weight:700; cursor:pointer; }
-#status { color:#ffd700; font-size:13px; }
+body { background:#0a0a1a; color:#fff; font-family:'Segoe UI',sans-serif; overflow:hidden; height:100vh; display:flex; flex-direction:column; }
+#bar { display:flex; justify-content:space-between; align-items:center; padding:8px 20px; background:rgba(255,255,255,0.05); border-bottom:1px solid rgba(255,255,255,0.1); flex-shrink:0; }
+#bar h1 { font-size:15px; color:#7ef7c8; }
+.stats { display:flex; gap:18px; }
+.s { text-align:center; }
+.sl { font-size:9px; color:rgba(255,255,255,0.4); text-transform:uppercase; }
+.sv { font-size:18px; font-weight:700; color:#7ef7c8; }
+#wrap { flex:1; position:relative; overflow:hidden; }
+#gc { position:absolute; inset:0; width:100%; height:100%; }
+#dbg { position:absolute; top:65px; left:10px; font-size:12px; color:#ffd700; background:rgba(0,0,0,0.6); padding:6px 12px; border-radius:8px; z-index:9; line-height:1.8; max-width:400px; }
+#prev { position:absolute; bottom:14px; right:14px; width:180px; height:135px; border-radius:10px; overflow:hidden; border:2px solid #7ef7c840; z-index:5; }
+#prev video { width:100%; height:100%; object-fit:cover; transform:scaleX(-1); display:block; }
+#pb { position:absolute; bottom:0; left:0; right:0; height:4px; background:rgba(255,255,255,0.07); }
+#pbf { height:100%; background:#7ef7c8; width:0; transition:width .3s; }
+.overlay { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; background:rgba(10,10,26,0.94); z-index:20; gap:14px; }
+.overlay h2 { font-size:26px; font-weight:700; color:#7ef7c8; }
+.overlay p { color:rgba(255,255,255,0.5); font-size:13px; text-align:center; max-width:380px; line-height:1.8; }
+.btn { padding:11px 26px; border-radius:10px; border:none; font-size:14px; font-weight:600; cursor:pointer; background:#7ef7c8; color:#0a0a1a; }
 </style>
 </head>
 <body>
-<h1>✋ Hand Tracking Test</h1>
-<div id="status">Click Start to begin</div>
-<button onclick="start()">Start Camera</button>
 
-<div id="container" style="display:none">
-  <video id="vid" autoplay playsinline muted></video>
-  <canvas id="cv"></canvas>
+<div id="bar">
+  <h1>✋ Hand Therapy Game</h1>
+  <div class="stats">
+    <div class="s"><div class="sl">Score</div><div class="sv" id="sc">0</div></div>
+    <div class="s"><div class="sl">Level</div><div class="sv" id="lv">1</div></div>
+    <div class="s"><div class="sl">Done</div><div class="sv" id="dn">0</div></div>
+    <div class="s"><div class="sl">Time</div><div class="sv" id="tm">3:00</div></div>
+  </div>
+  <div style="font-size:12px;color:rgba(255,255,255,0.4)">
+    <span style="color:#00c8ff">● Right</span> &nbsp;
+    <span style="color:#50ff78">● Left</span>
+  </div>
 </div>
 
-<div id="info" style="display:none">
-  <div class="row"><span>Status:</span> <span id="i-status">waiting...</span></div>
-  <div class="row"><span>Hands detected:</span> <span id="i-hands">0</span></div>
-  <div class="row"><span>Right hand position:</span> <span id="i-rpos">—</span></div>
-  <div class="row"><span>Left hand position:</span>  <span id="i-lpos">—</span></div>
-  <div class="row"><span>Right pinch distance:</span><span id="i-rpinch">—</span></div>
-  <div class="row"><span>Left pinch distance:</span> <span id="i-lpinch">—</span></div>
-  <div class="row"><span>Right grabbing:</span>      <span id="i-rgrab">—</span></div>
-  <div class="row"><span>Left grabbing:</span>       <span id="i-lgrab">—</span></div>
+<div id="wrap">
+  <canvas id="gc"></canvas>
+  <div id="dbg">Starting...</div>
+  <div id="prev"><video id="pvid" autoplay playsinline muted></video></div>
+  <div id="pb"><div id="pbf"></div></div>
+
+  <div class="overlay" id="ov-welcome">
+    <h2>✋ Hand Therapy Game</h2>
+    <p>
+      Pinch your <strong style="color:#7ef7c8">thumb + index finger</strong> together to grab a ball.<br>
+      Move it to the matching colored target.<br>
+      Open your hand to place it.<br><br>
+      Both hands work at the same time!
+    </p>
+    <button class="btn" id="btn-start">Allow Camera &amp; Play</button>
+    <p style="font-size:10px;color:rgba(255,255,255,0.25)">Nothing uploaded — camera stays on your device</p>
+  </div>
+
+  <div class="overlay" id="ov-over" style="display:none">
+    <h2>🎉 Session Complete!</h2>
+    <p id="ov-results"></p>
+    <button class="btn" onclick="restart()">Play Again</button>
+  </div>
 </div>
 
-<script type="module">
-import { HandLandmarker, FilesetResolver }
-  from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/vision_bundle.mjs";
+<!-- MediaPipe Hands (legacy API — most compatible) -->
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
 
-const vid  = document.getElementById('vid');
-const cv   = document.getElementById('cv');
-const ctx  = cv.getContext('2d');
-let lm=null, lastT=-1;
+<script>
+// ── Canvas ────────────────────────────────────────────
+const gc  = document.getElementById('gc');
+const ctx = gc.getContext('2d');
 
-window.start = async function(){
-  document.querySelector('button').textContent='Starting...';
-  document.getElementById('status').textContent='Requesting camera...';
+function W(){ return gc.width; }
+function H(){ return gc.height; }
+function resize(){
+  const w=document.getElementById('wrap');
+  gc.width=w.clientWidth; gc.height=w.clientHeight;
+}
+resize(); window.addEventListener('resize',resize);
 
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia({
-      video:{ width:640, height:480, facingMode:'user' }
-    });
-    vid.srcObject=stream;
-    await vid.play();
-    document.getElementById('container').style.display='block';
-    document.getElementById('info').style.display='block';
-    document.querySelector('button').style.display='none';
-    document.getElementById('status').textContent='Camera on — loading hand model...';
+// ── Constants ─────────────────────────────────────────
+const BCOLS=['#6b6bff','#3ddff0','#77cb6b','#ff964d','#ce6bff','#4dc8ff'];
+const HCOL={ Right:'#00c8ff', Left:'#50ff78' };
+const PER_LEVEL=5, SESSION=180;
+const PINCH_GRAB=0.07;
 
-    const vision=await FilesetResolver.forVisionTasks(
-      "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.3/wasm");
-    lm=await HandLandmarker.createFromOptions(vision,{
-      baseOptions:{
-        modelAssetPath:"https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/latest/hand_landmarker.task",
-        delegate:"GPU"
-      },
-      runningMode:"VIDEO", numHands:2,
-      minHandDetectionConfidence:.5,
-      minHandPresenceConfidence:.5,
-      minTrackingConfidence:.5,
-    });
-    document.getElementById('status').textContent='Ready! Show your hands';
-    document.getElementById('i-status').textContent='Model loaded ✓';
-    detect();
-  } catch(e) {
-    document.getElementById('status').textContent='Error: '+e.message;
-  }
+// ── Game State ────────────────────────────────────────
+let score=0,level=1,success=0,prog=0;
+let balls=[],targets=[],parts=[];
+let t0=null,running=false;
+let flashMsg='',flashAt=0;
+
+const HS={
+  Right:{ x:200,y:300,pinch:1,visible:false,lastSeen:0,heldId:null },
+  Left: { x:500,y:300,pinch:1,visible:false,lastSeen:0,heldId:null },
 };
 
-const CONNECTIONS=[
-  [0,1],[1,2],[2,3],[3,4],
-  [0,5],[5,6],[6,7],[7,8],
-  [0,9],[9,10],[10,11],[11,12],
-  [0,13],[13,14],[14,15],[15,16],
-  [0,17],[17,18],[18,19],[19,20],
-  [5,9],[9,13],[13,17]
-];
+function isGrab(h){ return h.pinch<PINCH_GRAB; }
 
-function detect(){
-  if(lm && vid.readyState>=2 && vid.currentTime!==lastT){
-    lastT=vid.currentTime;
-    cv.width=vid.videoWidth; cv.height=vid.videoHeight;
-
-    const res=lm.detectForVideo(vid,performance.now());
-    ctx.clearRect(0,0,cv.width,cv.height);
-
-    const info={
-      hands:0,
-      rpos:'—', lpos:'—',
-      rpinch:'—', lpinch:'—',
-      rgrab:'—', lgrab:'—',
-    };
-
-    if(res.landmarks && res.landmarks.length>0){
-      info.hands=res.landmarks.length;
-
-      res.handedness.forEach((ha,i)=>{
-        const raw=ha[0].categoryName;
-        // swap because front camera mirrors
-        const label=raw==='Left'?'Right':'Left';
-        const lms=res.landmarks[i];
-        const W=cv.width, H=cv.height;
-
-        // Draw skeleton
-        ctx.save();
-        ctx.scale(-1,1); ctx.translate(-W,0); // mirror to match video
-        const col=label==='Right'?'#00c8ff':'#50ff78';
-
-        // connections
-        ctx.strokeStyle=col; ctx.lineWidth=2;
-        for(const [a,b] of CONNECTIONS){
-          ctx.beginPath();
-          ctx.moveTo(lms[a].x*W, lms[a].y*H);
-          ctx.lineTo(lms[b].x*W, lms[b].y*H);
-          ctx.stroke();
-        }
-
-        // dots
-        lms.forEach((lm,j)=>{
-          ctx.beginPath();
-          ctx.arc(lm.x*W, lm.y*H, j===4||j===8?8:5, 0, Math.PI*2);
-          ctx.fillStyle=j===4||j===8?'#ffd700':col;
-          ctx.fill();
-        });
-
-        ctx.restore();
-
-        // Palm centre
-        const mi=[0,5,9,13,17];
-        let px=0,py=0;
-        for(const idx of mi){px+=lms[idx].x;py+=lms[idx].y;}
-        px/=mi.length; py/=mi.length;
-
-        // Pinch
-        const pinch=Math.hypot(lms[4].x-lms[8].x,lms[4].y-lms[8].y);
-        const grab=pinch<0.08;
-
-        if(label==='Right'){
-          info.rpos=`x:${(px*100).toFixed(1)}% y:${(py*100).toFixed(1)}%`;
-          info.rpinch=pinch.toFixed(4)+(pinch<0.08?' ← GRABBING':'');
-          info.rgrab=grab?'YES ✊':'no ✋';
-        } else {
-          info.lpos=`x:${(px*100).toFixed(1)}% y:${(py*100).toFixed(1)}%`;
-          info.lpinch=pinch.toFixed(4)+(pinch<0.08?' ← GRABBING':'');
-          info.lgrab=grab?'YES ✊':'no ✋';
-        }
-
-        // Label on video
-        ctx.save();
-        ctx.scale(-1,1); ctx.translate(-W,0);
-        ctx.fillStyle=col; ctx.font='bold 18px Segoe UI';
-        ctx.textAlign='center';
-        ctx.fillText(label+' '+(grab?'GRAB':'open'), px*W, py*H-30);
-        ctx.restore();
-      });
-    } else {
-      info.hands=0;
-      document.getElementById('i-status').textContent='No hands in view — move closer';
-    }
-
-    document.getElementById('i-hands').textContent=info.hands;
-    document.getElementById('i-rpos').textContent=info.rpos;
-    document.getElementById('i-lpos').textContent=info.lpos;
-    document.getElementById('i-rpinch').textContent=info.rpinch;
-    document.getElementById('i-lpinch').textContent=info.lpinch;
-    document.getElementById('i-rgrab').textContent=info.rgrab;
-    document.getElementById('i-lgrab').textContent=info.lgrab;
+// ── Spawn ─────────────────────────────────────────────
+function spawn(){
+  balls=[]; targets=[];
+  for(const h of Object.values(HS)) h.heldId=null;
+  const os=Math.max(24,52-level*2), ts=Math.max(34,68-level*2);
+  const n=Math.min(3+Math.floor(level/2),5);
+  for(let i=0;i<n;i++){
+    const c=BCOLS[i%BCOLS.length];
+    targets.push({x:50+Math.random()*(W()*0.36),y:80+Math.random()*(H()-170),c,r:ts,id:i,done:false});
+    balls.push({x:W()*0.6+Math.random()*(W()*0.33),y:80+Math.random()*(H()-170),c,r:os,id:i,placed:false,heldBy:null});
   }
-  requestAnimationFrame(detect);
 }
+
+function restart(){
+  document.getElementById('ov-over').style.display='none';
+  score=0;level=1;success=0;prog=0;
+  t0=Date.now();running=true;
+  spawn();ui();
+}
+
+// ── Draw ─────────────────────────────────────────────
+function drawTarget(t){
+  const p=Math.sin(Date.now()*.003)*4,r=t.r+p;
+  const g=ctx.createRadialGradient(t.x,t.y,0,t.x,t.y,r+22);
+  g.addColorStop(0,t.c+'44');g.addColorStop(1,'transparent');
+  ctx.beginPath();ctx.arc(t.x,t.y,r+22,0,Math.PI*2);ctx.fillStyle=g;ctx.fill();
+  if(t.done){
+    ctx.beginPath();ctx.arc(t.x,t.y,r,0,Math.PI*2);ctx.fillStyle=t.c+'55';ctx.fill();
+    ctx.strokeStyle=t.c;ctx.lineWidth=3;ctx.stroke();
+    ctx.strokeStyle='#fff';ctx.lineWidth=3;ctx.lineCap='round';
+    ctx.beginPath();ctx.moveTo(t.x-12,t.y);ctx.lineTo(t.x-3,t.y+10);ctx.lineTo(t.x+14,t.y-10);ctx.stroke();
+  } else {
+    ctx.save();ctx.setLineDash([8,5]);
+    ctx.beginPath();ctx.arc(t.x,t.y,r,0,Math.PI*2);ctx.strokeStyle=t.c+'88';ctx.lineWidth=2;ctx.stroke();
+    ctx.restore();
+  }
+}
+
+function drawBall(b){
+  if(b.placed)return;
+  const held=b.heldBy!==null,r=b.r*(held?1.18:1);
+  ctx.save();
+  ctx.shadowColor=b.c;ctx.shadowBlur=held?28:10;
+  const g=ctx.createRadialGradient(b.x-r*.3,b.y-r*.3,r*.05,b.x,b.y,r);
+  g.addColorStop(0,'#fff5');g.addColorStop(.3,b.c);g.addColorStop(1,b.c+'99');
+  ctx.beginPath();ctx.arc(b.x,b.y,r,0,Math.PI*2);ctx.fillStyle=g;ctx.fill();
+  ctx.shadowBlur=0;
+  ctx.fillStyle='rgba(255,255,255,0.25)';
+  ctx.beginPath();ctx.ellipse(b.x-r*.25,b.y-r*.25,r*.2,r*.12,-.5,0,Math.PI*2);ctx.fill();
+  if(held){ctx.strokeStyle=HCOL[b.heldBy]+'cc';ctx.lineWidth=2.5;ctx.beginPath();ctx.arc(b.x,b.y,r+6,0,Math.PI*2);ctx.stroke();}
+  ctx.restore();
+}
+
+function drawHand(h,label){
+  if(!h.visible)return;
+  const col=HCOL[label],grab=isGrab(h),r=grab?14:22;
+  ctx.save();
+  ctx.shadowColor=col;ctx.shadowBlur=16;
+  ctx.beginPath();ctx.arc(h.x,h.y,r,0,Math.PI*2);
+  ctx.fillStyle=col+'44';ctx.fill();
+  ctx.strokeStyle=col;ctx.lineWidth=3;ctx.stroke();
+  ctx.shadowBlur=0;
+  if(!grab){
+    const ang=[-0.6,-0.2,0.2,0.6,1.1],len=[25,30,30,25,18];
+    ctx.strokeStyle=col+'99';ctx.lineWidth=3;ctx.lineCap='round';
+    for(let i=0;i<5;i++){
+      const a=ang[i]-Math.PI/2;
+      ctx.beginPath();ctx.moveTo(h.x,h.y);
+      ctx.lineTo(h.x+Math.cos(a)*len[i],h.y+Math.sin(a)*len[i]);ctx.stroke();
+    }
+  } else {
+    ctx.setLineDash([4,4]);ctx.beginPath();ctx.arc(h.x,h.y,r+8,0,Math.PI*2);ctx.strokeStyle=col;ctx.lineWidth=1.5;ctx.stroke();ctx.setLineDash([]);
+  }
+  ctx.fillStyle=col;ctx.font='bold 11px Segoe UI';ctx.textAlign='center';
+  ctx.fillText(`${label[0]} ${grab?'GRAB':'OPEN'}`,h.x,h.y-r-8);
+  const bw=44,filled=Math.max(0,Math.min(1,1-h.pinch/0.15))*bw;
+  ctx.fillStyle='rgba(255,255,255,0.12)';ctx.fillRect(h.x-bw/2,h.y+r+6,bw,4);
+  ctx.fillStyle=grab?'#ff6060':col;ctx.fillRect(h.x-bw/2,h.y+r+6,filled,4);
+  ctx.restore();
+}
+
+function drawParts(){
+  for(const p of parts){
+    ctx.save();ctx.globalAlpha=p.l;ctx.fillStyle=p.c;
+    ctx.beginPath();ctx.arc(p.x,p.y,p.s*p.l,0,Math.PI*2);ctx.fill();ctx.restore();
+  }
+}
+
+function burst(x,y,c){
+  for(let i=0;i<18;i++){
+    const a=Math.random()*Math.PI*2,s=2+Math.random()*5;
+    parts.push({x,y,vx:Math.cos(a)*s,vy:Math.sin(a)*s,c,l:1,s:4+Math.random()*6});
+  }
+}
+
+let flashMsg2='',flashAt2=0;
+function flash(msg){flashMsg2=msg;flashAt2=Date.now();}
+function drawFlash(){
+  if(!flashMsg2||Date.now()-flashAt2>1200)return;
+  const a=Math.max(0,(1200-(Date.now()-flashAt2))/1200);
+  ctx.save();ctx.globalAlpha=a;ctx.fillStyle='#ffd700';ctx.font='bold 56px Segoe UI';ctx.textAlign='center';
+  ctx.fillText(flashMsg2,W()/2,H()/2);ctx.restore();
+}
+
+// ── Logic ─────────────────────────────────────────────
+function updateHand(h,label){
+  const grab=isGrab(h);
+  if(!h.visible){
+    if(h.heldId!==null){const b=balls.find(b=>b.id===h.heldId);if(b)b.heldBy=null;h.heldId=null;}
+    return;
+  }
+  if(grab&&h.heldId===null){
+    for(const b of balls){
+      if(b.placed||b.heldBy!==null)continue;
+      if(Math.hypot(h.x-b.x,h.y-b.y)<b.r+55){b.heldBy=label;h.heldId=b.id;break;}
+    }
+  }
+  if(grab&&h.heldId!==null){
+    const b=balls.find(b=>b.id===h.heldId);
+    if(b){b.x+=(h.x-b.x)*.55;b.y+=(h.y-b.y)*.55;}
+  }
+  if(!grab&&h.heldId!==null){
+    const b=balls.find(b=>b.id===h.heldId);
+    if(b){
+      const t=targets.find(t=>t.id===b.id);
+      if(t&&Math.hypot(b.x-t.x,b.y-t.y)<t.r+45){
+        b.x=t.x;b.y=t.y;b.placed=true;t.done=true;
+        burst(t.x,t.y,t.c);
+        score+=10*level;success++;prog++;
+        flash(`+${10*level}!`);ui();
+        if(prog>=PER_LEVEL){prog=0;level++;flash(`Level ${level}!`);spawn();}
+        else if(balls.every(b=>b.placed))spawn();
+      }
+      b.heldBy=null;
+    }
+    h.heldId=null;
+  }
+}
+
+function ui(){
+  document.getElementById('sc').textContent=score;
+  document.getElementById('lv').textContent=level;
+  document.getElementById('dn').textContent=success;
+  document.getElementById('pbf').style.width=(prog/PER_LEVEL*100)+'%';
+}
+
+function tick(){
+  if(!t0)return;
+  const rem=Math.max(0,SESSION-(Date.now()-t0)/1000);
+  const m=Math.floor(rem/60),s=Math.floor(rem%60);
+  document.getElementById('tm').textContent=`${m}:${s.toString().padStart(2,'0')}`;
+  if(rem<=0&&running){running=false;endGame();}
+}
+
+function endGame(){
+  const e=Math.floor((Date.now()-t0)/1000);
+  document.getElementById('ov-results').innerHTML=`Score:${score} | Level:${level} | Placed:${success}`;
+  document.getElementById('ov-over').style.display='flex';
+}
+
+// ── Main loop ─────────────────────────────────────────
+function loop(){
+  resize();
+  ctx.fillStyle='#0a0a1a';ctx.fillRect(0,0,W(),H());
+  ctx.fillStyle='rgba(255,255,255,0.025)';
+  for(let x=0;x<W();x+=40)for(let y=0;y<H();y+=40){ctx.beginPath();ctx.arc(x,y,1.5,0,Math.PI*2);ctx.fill();}
+  ctx.save();ctx.strokeStyle='rgba(255,255,255,0.07)';ctx.lineWidth=1;ctx.setLineDash([6,6]);
+  ctx.beginPath();ctx.moveTo(W()/2,0);ctx.lineTo(W()/2,H());ctx.stroke();ctx.restore();
+  ctx.fillStyle='rgba(255,255,255,0.12)';ctx.font='13px Segoe UI';ctx.textAlign='center';
+  ctx.fillText('Target Zone',W()*.25,28);ctx.fillText('Grab from here',W()*.75,28);
+
+  if(running){
+    parts=parts.filter(p=>p.l>0);
+    for(const p of parts){p.x+=p.vx;p.y+=p.vy;p.vy+=.1;p.l-=.025;p.s*=.97;}
+    for(const h of Object.values(HS))if(Date.now()-h.lastSeen>500)h.visible=false;
+    for(const [lbl,h] of Object.entries(HS))updateHand(h,lbl);
+    tick();
+  }
+
+  for(const t of targets)drawTarget(t);
+  for(const b of balls)drawBall(b);
+  drawParts();
+  for(const [lbl,h] of Object.entries(HS))drawHand(h,lbl);
+  drawFlash();
+
+  if(!Object.values(HS).some(h=>h.visible)&&running){
+    ctx.fillStyle='rgba(255,255,255,0.3)';ctx.font='20px Segoe UI';ctx.textAlign='center';
+    ctx.fillText('Show your hands to play!',W()/2,H()/2);
+  }
+  requestAnimationFrame(loop);
+}
+
+// ── MediaPipe Hands (legacy - very compatible) ────────
+function onResults(results){
+  const dbg=document.getElementById('dbg');
+  if(!results.multiHandLandmarks||results.multiHandLandmarks.length===0){
+    dbg.textContent='No hands detected — show hand to camera';
+    for(const h of Object.values(HS))h.visible=false;
+    return;
+  }
+
+  // Reset
+  for(const h of Object.values(HS))h.visible=false;
+
+  results.multiHandLandmarks.forEach((lms,i)=>{
+    const raw=results.multiHandedness[i].label;
+    // front camera mirrors left/right
+    const label=raw==='Left'?'Right':'Left';
+    const h=HS[label]; if(!h)return;
+
+    // Palm centre
+    const mi=[0,5,9,13,17];
+    let px=0,py=0;
+    for(const idx of mi){px+=lms[idx].x;py+=lms[idx].y;}
+    px/=mi.length;py/=mi.length;
+
+    // Map normalised → canvas pixels
+    // x is already mirrored by MediaPipe for selfie camera
+    h.x=px*W();
+    h.y=py*H();
+    h.visible=true;
+    h.lastSeen=Date.now();
+
+    // Pinch: thumb tip (4) to index tip (8)
+    h.pinch=Math.hypot(lms[4].x-lms[8].x,lms[4].y-lms[8].y);
+
+    dbg.textContent=`${label}: pinch=${h.pinch.toFixed(3)} ${isGrab(h)?'✊ GRABBING':'✋ open'} | x=${Math.round(h.x)} y=${Math.round(h.y)}`;
+  });
+}
+
+// ── Start ─────────────────────────────────────────────
+document.getElementById('btn-start').onclick=async function(){
+  document.getElementById('ov-welcome').style.display='none';
+  document.getElementById('dbg').textContent='Starting camera...';
+
+  const video=document.createElement('video');
+  video.autoplay=true; video.playsinline=true; video.muted=true;
+
+  try{
+    const stream=await navigator.mediaDevices.getUserMedia({video:{width:640,height:480,facingMode:'user'}});
+    video.srcObject=stream;
+    document.getElementById('pvid').srcObject=stream;
+    await video.play();
+    await document.getElementById('pvid').play();
+  } catch(e){
+    document.getElementById('dbg').textContent='Camera error: '+e.message;
+    return;
+  }
+
+  const hands=new Hands({locateFile:f=>`https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`});
+  hands.setOptions({
+    maxNumHands:2,
+    modelComplexity:1,
+    minDetectionConfidence:0.6,
+    minTrackingConfidence:0.6,
+  });
+  hands.onResults(onResults);
+
+  document.getElementById('dbg').textContent='Loading hand model...';
+
+  const camera=new Camera(video,{
+    onFrame:async()=>{ await hands.send({image:video}); },
+    width:640, height:480,
+  });
+  camera.start();
+
+  document.getElementById('dbg').textContent='Camera ready — show your hands!';
+
+  spawn();
+  t0=Date.now();
+  running=true;
+  ui();
+};
+
+window.restart=restart;
+loop();
 </script>
 </body>
 </html>
