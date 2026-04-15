@@ -15,7 +15,6 @@ body { background:#0a0a1a; color:#fff; font-family:'Segoe UI',sans-serif; overfl
 .sv { font-size:18px; font-weight:700; color:#7ef7c8; }
 #wrap { flex:1; position:relative; overflow:hidden; }
 #gc { position:absolute; inset:0; width:100%; height:100%; }
-#mode-btn { position:absolute; top:10px; right:10px; z-index:10; padding:6px 14px; border-radius:8px; border:1px solid #7ef7c840; background:rgba(0,0,0,0.5); color:#7ef7c8; font-size:12px; cursor:pointer; }
 #dbg { position:absolute; top:65px; left:10px; font-size:12px; color:#ffd700; background:rgba(0,0,0,0.7); padding:6px 12px; border-radius:8px; z-index:9; }
 #prev { position:absolute; bottom:14px; right:14px; width:160px; height:120px; border-radius:10px; overflow:hidden; border:2px solid #7ef7c840; z-index:5; display:none; }
 #prev video { width:100%; height:100%; object-fit:cover; transform:scaleX(-1); display:block; }
@@ -47,8 +46,6 @@ body { background:#0a0a1a; color:#fff; font-family:'Segoe UI',sans-serif; overfl
   <div id="dbg" style="display:none"></div>
   <div id="prev"><video id="pvid" autoplay playsinline muted></video></div>
   <div id="pb"><div id="pbf"></div></div>
-
-  <!-- Welcome screen with mode selection -->
   <div class="overlay" id="ov-start">
     <h2>✋ Hand Therapy Game</h2>
     <p>Choose how you want to play:</p>
@@ -63,45 +60,29 @@ body { background:#0a0a1a; color:#fff; font-family:'Segoe UI',sans-serif; overfl
       </div>
     </div>
   </div>
-
   <div class="overlay" id="ov-over" style="display:none">
     <h2>🎉 Session Complete!</h2>
     <p id="ov-txt"></p>
     <button class="btn" onclick="restart()">Play Again</button>
   </div>
 </div>
-
 <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
 <script>
 const gc=document.getElementById('gc');
 const ctx=gc.getContext('2d');
 function W(){return gc.width;}
 function H(){return gc.height;}
-function resize(){
-  const w=document.getElementById('wrap');
-  gc.width=w.clientWidth; gc.height=w.clientHeight;
-}
-resize(); window.addEventListener('resize',resize);
-
+function resize(){const w=document.getElementById('wrap');gc.width=w.clientWidth;gc.height=w.clientHeight;}
+resize();window.addEventListener('resize',resize);
 const COLS=['#6b6bff','#3ddff0','#77cb6b','#ff964d','#ce6bff','#4dc8ff'];
 const SESSION=180;
 const PINCH_THRESH=0.08;
-
-// ── Cursor state — ONE cursor, always visible ──────────
-const cursor={
-  x:400, y:300,
-  grabbing:false,
-  ballId:null,
-  color:'#00c8ff',
-  mode:'mouse' // 'mouse' or 'hand'
-};
-
+const cursor={x:400,y:300,grabbing:false,ballId:null,color:'#00c8ff',mode:'mouse'};
 let score=0,level=1,placed=0,totalDone=0;
 let balls=[],targets=[],sparks=[];
-let t0=null,running=false;
-let flashTxt='',flashAt=0;
+let t0=null,running=false,flashTxt='',flashAt=0;
+let prevPinch=false;
 
-// ── Spawn ─────────────────────────────────────────────
 function spawn(){
   balls=[];targets=[];
   cursor.ballId=null;cursor.grabbing=false;
@@ -115,19 +96,11 @@ function spawn(){
   }
 }
 
-function restart(){
-  document.getElementById('ov-over').style.display='none';
-  score=0;level=1;placed=0;totalDone=0;
-  t0=Date.now();running=true;
-  spawn();ui();
-}
-
 function ui(){
   document.getElementById('sc').textContent=score;
   document.getElementById('lv').textContent=level;
   document.getElementById('dn').textContent=totalDone;
-  document.getElementById('pbf').style.width=
-    (placed/Math.min(3+Math.floor(level/2),5)*100)+'%';
+  document.getElementById('pbf').style.width=(placed/Math.min(3+Math.floor(level/2),5)*100)+'%';
 }
 
 function flash(m){flashTxt=m;flashAt=Date.now();}
@@ -139,162 +112,102 @@ function burst(x,y,c){
   }
 }
 
-// ── Core grab/release logic ───────────────────────────
 function tryGrab(){
-  if(cursor.ballId!==null) return;
-  let closest=null, closestD=999999;
+  if(cursor.ballId!==null)return;
+  let closest=null,closestD=999999;
   for(const b of balls){
-    if(b.placed||b.grabbed) continue;
+    if(b.placed||b.grabbed)continue;
     const d=Math.hypot(cursor.x-b.x,cursor.y-b.y);
-    if(d<b.r+70 && d<closestD){closest=b;closestD=d;}
+    if(d<b.r+70&&d<closestD){closest=b;closestD=d;}
   }
-  if(closest){
-    closest.grabbed=true;
-    cursor.ballId=closest.id;
-  }
+  if(closest){closest.grabbed=true;cursor.ballId=closest.id;}
 }
 
 function tryRelease(){
-  if(cursor.ballId===null) return;
+  if(cursor.ballId===null)return;
   const b=balls.find(b=>b.id===cursor.ballId);
   cursor.ballId=null;
-  if(!b||b.placed) return;
+  if(!b||b.placed)return;
   b.grabbed=false;
   const t=targets.find(t=>t.id===b.id);
   if(t&&!t.done&&Math.hypot(b.x-t.x,b.y-t.y)<t.r+55){
     b.x=t.x;b.y=t.y;b.placed=true;t.done=true;
     burst(t.x,t.y,t.c);
     score+=10*level;placed++;totalDone++;
-    flash(`+${10*level}!`);ui();
+    flash('+'+10*level+'!');ui();
     if(balls.every(b=>b.placed)){
-      level++;placed=0;flash(`Level ${level}!`);
+      level++;placed=0;flash('Level '+level+'!');
       setTimeout(spawn,1000);
     }
   }
 }
 
 function dragBall(){
-  if(cursor.ballId===null) return;
+  if(cursor.ballId===null)return;
   const b=balls.find(b=>b.id===cursor.ballId);
   if(!b||b.placed){cursor.ballId=null;return;}
   b.x+=(cursor.x-b.x)*0.7;
   b.y+=(cursor.y-b.y)*0.7;
 }
 
-// ── Mouse events ──────────────────────────────────────
 function setupMouse(){
   const wrap=document.getElementById('wrap');
-  wrap.addEventListener('mousemove',e=>{
-    const r=wrap.getBoundingClientRect();
-    cursor.x=e.clientX-r.left;
-    cursor.y=e.clientY-r.top;
-  });
-  wrap.addEventListener('mousedown',e=>{
-    cursor.grabbing=true;
-    tryGrab();
-  });
-  wrap.addEventListener('mouseup',e=>{
-    cursor.grabbing=false;
-    tryRelease();
-  });
-  // Touch support for mobile
-  wrap.addEventListener('touchmove',e=>{
-    e.preventDefault();
-    const r=wrap.getBoundingClientRect();
-    cursor.x=e.touches[0].clientX-r.left;
-    cursor.y=e.touches[0].clientY-r.top;
-  },{passive:false});
-  wrap.addEventListener('touchstart',e=>{
-    const r=wrap.getBoundingClientRect();
-    cursor.x=e.touches[0].clientX-r.left;
-    cursor.y=e.touches[0].clientY-r.top;
-    cursor.grabbing=true;
-    tryGrab();
-  });
-  wrap.addEventListener('touchend',e=>{
-    cursor.grabbing=false;
-    tryRelease();
-  });
+  wrap.addEventListener('mousemove',e=>{const r=wrap.getBoundingClientRect();cursor.x=e.clientX-r.left;cursor.y=e.clientY-r.top;});
+  wrap.addEventListener('mousedown',e=>{cursor.grabbing=true;tryGrab();});
+  wrap.addEventListener('mouseup',e=>{cursor.grabbing=false;tryRelease();});
+  wrap.addEventListener('touchmove',e=>{e.preventDefault();const r=wrap.getBoundingClientRect();cursor.x=e.touches[0].clientX-r.left;cursor.y=e.touches[0].clientY-r.top;},{passive:false});
+  wrap.addEventListener('touchstart',e=>{const r=wrap.getBoundingClientRect();cursor.x=e.touches[0].clientX-r.left;cursor.y=e.touches[0].clientY-r.top;cursor.grabbing=true;tryGrab();});
+  wrap.addEventListener('touchend',e=>{cursor.grabbing=false;tryRelease();});
 }
-
-// ── Hand tracking via MediaPipe ───────────────────────
-let mpReady=false;
-let prevPinch=false;
 
 function setupHand(){
   document.getElementById('prev').style.display='block';
   document.getElementById('dbg').style.display='block';
   cursor.color='#50ff78';
-
   const video=document.createElement('video');
   video.autoplay=true;video.playsinline=true;video.muted=true;
-
   navigator.mediaDevices.getUserMedia({video:{width:640,height:480,facingMode:'user'}})
     .then(async stream=>{
       video.srcObject=stream;
       document.getElementById('pvid').srcObject=stream;
       await video.play();
       await document.getElementById('pvid').play();
-
-      const mp=new Hands({locateFile:f=>`https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`});
+      const mp=new Hands({locateFile:f=>'https://cdn.jsdelivr.net/npm/@mediapipe/hands/'+f});
       mp.setOptions({maxNumHands:1,modelComplexity:1,minDetectionConfidence:0.5,minTrackingConfidence:0.5});
       mp.onResults(res=>{
         if(!res.multiHandLandmarks||!res.multiHandLandmarks.length){
-          document.getElementById('dbg').textContent='No hand — show hand to camera';
+          document.getElementById('dbg').textContent='No hand detected';
           return;
         }
         const lms=res.multiHandLandmarks[0];
-
-        // Palm centre for cursor position
         const mi=[0,5,9,13,17];
         let px=0,py=0;
         for(const j of mi){px+=lms[j].x;py+=lms[j].y;}
         px/=mi.length;py/=mi.length;
         cursor.x+=(px*W()-cursor.x)*0.7;
         cursor.y+=(py*H()-cursor.y)*0.7;
-
-        // Pinch detection
         const dist=Math.hypot(lms[4].x-lms[8].x,lms[4].y-lms[8].y);
         const pinching=dist<PINCH_THRESH;
-
-        // Pinch START = grab, pinch END = release
-        if(pinching&&!prevPinch){
-          cursor.grabbing=true;
-          tryGrab();
-        } else if(!pinching&&prevPinch){
-          cursor.grabbing=false;
-          tryRelease();
-        }
+        if(pinching&&!prevPinch){cursor.grabbing=true;tryGrab();}
+        else if(!pinching&&prevPinch){cursor.grabbing=false;tryRelease();}
         prevPinch=pinching;
         cursor.color=pinching?'#ff6060':'#50ff78';
-
-        document.getElementById('dbg').textContent=
-          `dist=${dist.toFixed(3)} ${pinching?'🤏PINCH':'☝️'} ball=${cursor.ballId}`;
+        document.getElementById('dbg').textContent='dist='+dist.toFixed(3)+' '+(pinching?'PINCH':'open')+' ball='+cursor.ballId;
       });
-
       let busy=false;
       async function detect(){
-        if(!busy&&video.readyState>=2){
-          busy=true;
-          try{await mp.send({image:video});}catch(e){}
-          busy=false;
-        }
+        if(!busy&&video.readyState>=2){busy=true;try{await mp.send({image:video});}catch(e){}busy=false;}
         requestAnimationFrame(detect);
       }
       detect();
-      mpReady=true;
     })
-    .catch(e=>{
-      document.getElementById('dbg').textContent='Camera error: '+e.message;
-    });
+    .catch(e=>{document.getElementById('dbg').textContent='Camera error: '+e.message;});
 }
 
-// ── Draw ──────────────────────────────────────────────
 function drawBg(){
   ctx.fillStyle='#0a0a1a';ctx.fillRect(0,0,W(),H());
   ctx.fillStyle='rgba(255,255,255,0.02)';
-  for(let x=0;x<W();x+=40)
-    for(let y=0;y<H();y+=40){ctx.beginPath();ctx.arc(x,y,1.5,0,Math.PI*2);ctx.fill();}
+  for(let x=0;x<W();x+=40)for(let y=0;y<H();y+=40){ctx.beginPath();ctx.arc(x,y,1.5,0,Math.PI*2);ctx.fill();}
   ctx.save();ctx.strokeStyle='rgba(255,255,255,0.06)';ctx.lineWidth=1;ctx.setLineDash([6,6]);
   ctx.beginPath();ctx.moveTo(W()/2,0);ctx.lineTo(W()/2,H());ctx.stroke();ctx.restore();
   ctx.fillStyle='rgba(255,255,255,0.1)';ctx.font='13px Segoe UI';ctx.textAlign='center';
@@ -303,11 +216,11 @@ function drawBg(){
 
 function drawTarget(t){
   const p=Math.sin(Date.now()*.003)*4,r=Math.max(4,t.r+p);
-  const g=ctx.createRadialGradient(t.x,t.y,0,t.x,t.y,r+22);
+  const g=ctx.createRadialGradient(t.x,t.y,0,t.x,t.y,Math.max(4,r+22));
   g.addColorStop(0,t.c+'44');g.addColorStop(1,'transparent');
-  ctx.beginPath();ctx.arc(t.x,t.y,Math.max(0.1,r+22),0,Math.PI*2);ctx.fillStyle=g;ctx.fill();
+  ctx.beginPath();ctx.arc(t.x,t.y,Math.max(4,r+22),0,Math.PI*2);ctx.fillStyle=g;ctx.fill();
   if(t.done){
-    ctx.beginPath();ctx.arc(t.x,t.y,Math.max(0.1,r),0,Math.PI*2);ctx.fillStyle=t.c+'55';ctx.fill();
+    ctx.beginPath();ctx.arc(t.x,t.y,r,0,Math.PI*2);ctx.fillStyle=t.c+'55';ctx.fill();
     ctx.strokeStyle=t.c;ctx.lineWidth=3;ctx.stroke();
     ctx.strokeStyle='#fff';ctx.lineWidth=3;ctx.lineCap='round';
     ctx.beginPath();ctx.moveTo(t.x-12,t.y);ctx.lineTo(t.x-3,t.y+10);ctx.lineTo(t.x+14,t.y-10);ctx.stroke();
@@ -323,66 +236,48 @@ function drawBall(b){
   const held=b.grabbed,r=Math.max(4,b.r*(held?1.15:1));
   ctx.save();
   ctx.shadowColor=b.c;ctx.shadowBlur=held?28:10;
-  const g=ctx.createRadialGradient(b.x-r*.3,b.y-r*.3,r*.05,b.x,b.y,r);
+  const g=ctx.createRadialGradient(b.x-r*.3,b.y-r*.3,Math.max(0.1,r*.05),b.x,b.y,r);
   g.addColorStop(0,'#fff5');g.addColorStop(.3,b.c);g.addColorStop(1,b.c+'99');
-  ctx.beginPath();ctx.arc(b.x,b.y,Math.max(0.1,r),0,Math.PI*2);ctx.fillStyle=g;ctx.fill();
+  ctx.beginPath();ctx.arc(b.x,b.y,r,0,Math.PI*2);ctx.fillStyle=g;ctx.fill();
   ctx.shadowBlur=0;
   ctx.fillStyle='rgba(255,255,255,0.25)';
-  ctx.beginPath();ctx.ellipse(b.x-r*.25,b.y-r*.25,r*.2,r*.12,-.5,0,Math.PI*2);ctx.fill();
-  if(held){
-    ctx.strokeStyle=cursor.color+'cc';ctx.lineWidth=2.5;
-    ctx.beginPath();ctx.arc(b.x,b.y,Math.max(1,r+6),0,Math.PI*2);ctx.stroke();
-  }
+  ctx.beginPath();ctx.ellipse(b.x-r*.25,b.y-r*.25,Math.max(1,r*.2),Math.max(1,r*.12),-.5,0,Math.PI*2);ctx.fill();
+  if(held){ctx.strokeStyle=cursor.color+'cc';ctx.lineWidth=2.5;ctx.beginPath();ctx.arc(b.x,b.y,Math.max(4,r+6),0,Math.PI*2);ctx.stroke();}
   ctx.restore();
 }
 
 function drawCursor(){
   const col=cursor.color;
-  const r=Math.max(4, cursor.grabbing?12:20);
+  const r=Math.max(4,cursor.grabbing?12:20);
   ctx.save();
   ctx.shadowColor=col;ctx.shadowBlur=14;
   ctx.beginPath();ctx.arc(cursor.x,cursor.y,r,0,Math.PI*2);
   ctx.fillStyle=col+'33';ctx.fill();
   ctx.strokeStyle=col;ctx.lineWidth=3;ctx.stroke();
   ctx.shadowBlur=0;
-  ctx.beginPath();ctx.arc(cursor.x,cursor.y,4,0,Math.PI*2);
-  ctx.fillStyle=col;ctx.fill();
+  ctx.beginPath();ctx.arc(cursor.x,cursor.y,4,0,Math.PI*2);ctx.fillStyle=col;ctx.fill();
   if(!cursor.grabbing){
     const ang=[-0.6,-0.2,0.2,0.6,1.1],len=[22,27,27,22,16];
     ctx.strokeStyle=col+'88';ctx.lineWidth=2.5;ctx.lineCap='round';
-    for(let i=0;i<5;i++){
-      const a=ang[i]-Math.PI/2;
-      ctx.beginPath();ctx.moveTo(cursor.x,cursor.y);
-      ctx.lineTo(cursor.x+Math.cos(a)*len[i],cursor.y+Math.sin(a)*len[i]);ctx.stroke();
-    }
+    for(let i=0;i<5;i++){const a=ang[i]-Math.PI/2;ctx.beginPath();ctx.moveTo(cursor.x,cursor.y);ctx.lineTo(cursor.x+Math.cos(a)*len[i],cursor.y+Math.sin(a)*len[i]);ctx.stroke();}
   } else {
-    ctx.setLineDash([3,3]);
-    ctx.beginPath();ctx.arc(cursor.x,cursor.y,Math.max(1,r+8),0,Math.PI*2);
-    ctx.strokeStyle=col;ctx.lineWidth=1.5;ctx.stroke();ctx.setLineDash([]);
+    ctx.setLineDash([3,3]);ctx.beginPath();ctx.arc(cursor.x,cursor.y,Math.max(4,r+8),0,Math.PI*2);ctx.strokeStyle=col;ctx.lineWidth=1.5;ctx.stroke();ctx.setLineDash([]);
   }
-  const mode=cursor.mode==='mouse'?'🖱️':'✋';
-  const lbl=cursor.ballId!==null?`${mode} release to place`:`${mode} ${cursor.mode==='mouse'?'click':'pinch'} to grab`;
   ctx.fillStyle=col;ctx.font='bold 11px Segoe UI';ctx.textAlign='center';
-  ctx.fillText(lbl,cursor.x,cursor.y-r-8);
+  ctx.fillText(cursor.ballId!==null?'release to place':(cursor.mode==='mouse'?'click to grab':'pinch to grab'),cursor.x,cursor.y-r-8);
   ctx.restore();
 }
 
 function drawSparks(){
-  for(const s of sparks){
-    ctx.save();ctx.globalAlpha=s.l;ctx.fillStyle=s.c;
-    ctx.beginPath();ctx.arc(s.x,s.y,Math.max(0.1,s.r*s.l),0,Math.PI*2);ctx.fill();ctx.restore();
-  }
+  for(const s of sparks){ctx.save();ctx.globalAlpha=s.l;ctx.fillStyle=s.c;ctx.beginPath();ctx.arc(s.x,s.y,Math.max(0.1,s.r*s.l),0,Math.PI*2);ctx.fill();ctx.restore();}
 }
 
 function drawFlash(){
   if(!flashTxt||Date.now()-flashAt>1200)return;
   const a=Math.max(0,(1200-(Date.now()-flashAt))/1200);
-  ctx.save();ctx.globalAlpha=a;ctx.fillStyle='#ffd700';
-  ctx.font='bold 56px Segoe UI';ctx.textAlign='center';
-  ctx.fillText(flashTxt,W()/2,H()/2);ctx.restore();
+  ctx.save();ctx.globalAlpha=a;ctx.fillStyle='#ffd700';ctx.font='bold 56px Segoe UI';ctx.textAlign='center';ctx.fillText(flashTxt,W()/2,H()/2);ctx.restore();
 }
 
-// ── Main loop ─────────────────────────────────────────
 function loop(){
   resize();drawBg();
   sparks=sparks.filter(s=>s.l>0);
@@ -391,44 +286,35 @@ function loop(){
     dragBall();
     const rem=Math.max(0,SESSION-(Date.now()-t0)/1000);
     const m=Math.floor(rem/60),s=Math.floor(rem%60);
-    document.getElementById('tm').textContent=`${m}:${s.toString().padStart(2,'0')}`;
+    document.getElementById('tm').textContent=m+':'+(s<10?'0':'')+s;
     if(rem<=0&&running){running=false;endGame();}
   }
   for(const t of targets)drawTarget(t);
   for(const b of balls)drawBall(b);
-  drawSparks();
-  drawCursor();
-  drawFlash();
+  drawSparks();drawCursor();drawFlash();
   requestAnimationFrame(loop);
 }
 
 function endGame(){
-  document.getElementById('ov-txt').innerHTML=`Score:${score} | Level:${level} | Placed:${totalDone}`;
+  document.getElementById('ov-txt').innerHTML='Score:'+score+' | Level:'+level+' | Placed:'+totalDone;
   document.getElementById('ov-over').style.display='flex';
 }
 
-// ── Start functions ───────────────────────────────────
 window.startMouse=function(){
   document.getElementById('ov-start').style.display='none';
-  cursor.mode='mouse';
-  cursor.color='#00c8ff';
-  setupMouse();
-  spawn();t0=Date.now();running=true;ui();
+  cursor.mode='mouse';cursor.color='#00c8ff';
+  setupMouse();spawn();t0=Date.now();running=true;ui();
 };
 
 window.startHand=function(){
   document.getElementById('ov-start').style.display='none';
   cursor.mode='hand';
-  setupMouse(); // mouse as fallback
-  setupHand();
-  spawn();t0=Date.now();running=true;ui();
+  setupMouse();setupHand();spawn();t0=Date.now();running=true;ui();
 };
 
 window.restart=function(){
   document.getElementById('ov-over').style.display='none';
-  score=0;level=1;placed=0;totalDone=0;
-  t0=Date.now();running=true;
-  spawn();ui();
+  score=0;level=1;placed=0;totalDone=0;t0=Date.now();running=true;spawn();ui();
 };
 
 loop();
